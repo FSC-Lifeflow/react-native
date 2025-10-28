@@ -1,0 +1,377 @@
+import { supabase } from '../lib/supabase';
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+
+// Enable WebBrowser for OAuth flows
+WebBrowser.maybeCompleteAuthSession();
+
+/**
+ * Type definition for user data that matches our database schema
+ */
+type User = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  created_at: string;
+  avatar_url?: string;
+  username: string;
+  social_privacy?: boolean;
+  activity_sharing?: boolean;
+  // Fitness goal specifications
+  fitness_level?: string | null;
+  primary_goals?: string | null;
+  exercise_preferences?: string | null;
+  weekly_frequency?: string | null;
+  session_duration?: string | null;
+  equipment_access?: string | null;
+  physical_limitations?: string | null;
+};
+
+/**
+ * Auth Service for React Native
+ * Handles authentication with Supabase
+ */
+export const authService = {
+  /**
+   * Registers a new user with email and password
+   */
+  async register(userData: {
+    username: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+  }) {
+    try {
+      console.log('🚀 Starting registration for:', userData.email);
+
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          data: {
+            username: userData.username,
+            first_name: userData.firstName,
+            last_name: userData.lastName,
+          },
+        },
+      });
+
+      if (authError) {
+        console.error('❌ Auth signup error:', authError);
+        throw new Error(authError.message);
+      }
+
+      if (!authData.user) {
+        console.error('❌ No user returned from auth signup');
+        throw new Error('Failed to create user');
+      }
+
+      console.log('✅ Auth user created');
+      return authData;
+    } catch (error) {
+      console.error('❌ Registration failed:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Authenticates a user with email and password
+   */
+  async login(credentials: { email: string; password: string }) {
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
+        });
+
+      if (authError) {
+        if (authError.message === 'Email not confirmed') {
+          throw new Error(
+            'Please confirm your email address before signing in. Check your email for a confirmation link.'
+          );
+        }
+        if (authError.message === 'Invalid login credentials') {
+          throw new Error(
+            'Invalid email or password. If you just registered, please check your email for a confirmation link first.'
+          );
+        }
+        throw new Error(authError.message);
+      }
+
+      if (!authData.user) {
+        throw new Error('Login failed');
+      }
+
+      // Retry fetching user data to account for trigger delay
+      let userRecord = null;
+      for (let i = 0; i < 3; i++) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .maybeSingle();
+
+        if (data) {
+          userRecord = data;
+          break;
+        }
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('❌ Failed to fetch user data on login:', error);
+          throw new Error('Failed to fetch user data after login.');
+        }
+
+        if (i < 2) {
+          console.log(`User record not found, retrying... (attempt ${i + 2})`);
+          await new Promise((res) => setTimeout(res, 500));
+        }
+      }
+
+      if (!userRecord) {
+        console.error('❌ Failed to fetch user data after multiple attempts.');
+        throw new Error('Could not retrieve user profile after login.');
+      }
+
+      return {
+        user: userRecord,
+        token: authData.session?.access_token || '',
+      };
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Initiates Google OAuth login flow for mobile
+   */
+  async loginWithGoogle() {
+    try {
+      const redirectUrl = AuthSession.makeRedirectUri({
+        path: 'auth/callback',
+      });
+
+      console.log('🔍 Redirect URL:', redirectUrl);
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) {
+        console.error('❌ Google OAuth error:', error);
+        throw new Error(error.message);
+      }
+
+      if (data?.url) {
+        // Open the OAuth URL in a browser
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUrl
+        );
+
+        if (result.type === 'success') {
+          // Extract the session from the URL
+          const { url } = result;
+          const params = new URLSearchParams(url.split('#')[1]);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+
+          if (accessToken && refreshToken) {
+            // Set the session
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+            return await this.handleOAuthCallback();
+          }
+        }
+      }
+
+      throw new Error('OAuth flow was cancelled or failed');
+    } catch (error) {
+      console.error('❌ Google OAuth failed:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Handles the OAuth callback after successful authentication
+   */
+  async handleOAuthCallback() {
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+
+      if (!session?.user) {
+        throw new Error('No session found after OAuth callback');
+      }
+
+      console.log('🔍 OAuth user metadata:', session.user.user_metadata);
+
+      const googleProfile = session.user.user_metadata;
+      const fullName = googleProfile?.full_name || googleProfile?.name || '';
+      const firstName =
+        googleProfile?.given_name ||
+        googleProfile?.first_name ||
+        fullName.split(' ')[0] ||
+        '';
+      const lastName =
+        googleProfile?.family_name ||
+        googleProfile?.last_name ||
+        fullName.split(' ').slice(1).join(' ') ||
+        '';
+      const email = session.user.email || '';
+
+      // Check if user profile exists
+      let userRecord = null;
+      for (let i = 0; i < 5; i++) {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (data) {
+          userRecord = data;
+          break;
+        }
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('❌ Failed to fetch user data after OAuth:', error);
+          throw new Error('Failed to fetch user data after OAuth login.');
+        }
+
+        if (i < 4) {
+          console.log(
+            `OAuth user record not found, retrying... (attempt ${i + 2})`
+          );
+          await new Promise((res) => setTimeout(res, 1000));
+        }
+      }
+
+      // Create user profile if it doesn't exist
+      if (!userRecord) {
+        console.log('Creating user profile for OAuth user...');
+        const { data: newUser, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: session.user.id,
+            email: email,
+            first_name: firstName,
+            last_name: lastName,
+            username: '',
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('❌ Failed to create OAuth user profile:', insertError);
+          throw new Error('Failed to create user profile after OAuth login.');
+        }
+
+        userRecord = newUser;
+      }
+
+      return {
+        user: userRecord,
+        token: session.access_token,
+      };
+    } catch (error) {
+      console.error('❌ OAuth callback handling failed:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Retrieves the currently authenticated user's data
+   */
+  async getCurrentUser() {
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(sessionError.message);
+      }
+
+      if (!session?.user) {
+        return null;
+      }
+
+      const { data: userRecord, error: dbError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (dbError) {
+        console.error('❌ Failed to fetch user data:', dbError);
+        return null;
+      }
+
+      return userRecord;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  /**
+   * Logs out the current user
+   */
+  async logout() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        throw new Error(error.message);
+      }
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Updates a user's profile information
+   */
+  async updateUserProfile(userId: string, updates: Partial<User>) {
+    try {
+      console.log('🔧 Updating user profile:', userId);
+      console.log('🔧 Updates:', updates);
+
+      const { data, error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', userId)
+        .select();
+
+      if (error) {
+        console.error('❌ Failed to update user profile:', error);
+        throw error;
+      }
+
+      console.log('✅ Profile updated successfully');
+      return data;
+    } catch (error) {
+      console.error('❌ Exception in updateUserProfile:', error);
+      throw error;
+    }
+  },
+};
