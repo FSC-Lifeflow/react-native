@@ -12,9 +12,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card } from '@/components/ui/Card';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = React.useCallback(() => {
@@ -62,19 +66,23 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+        />
       }
     >
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>
+          <Text style={[styles.greeting, { color: colors.foreground }]}>
             {getGreeting()}, {user?.first_name || 'there'}!
           </Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             Ready to make today count? Let's keep up the momentum! 💪
           </Text>
         </View>
@@ -82,65 +90,65 @@ export default function DashboardScreen() {
 
       {/* Today's Progress */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Today's Progress</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Today's Progress</Text>
         
         <View style={styles.statsGrid}>
           <StatCard
-            icon={<Ionicons name="footsteps" size={20} color="#007AFF" />}
+            icon={<Ionicons name="footsteps" size={20} color={colors.primary} />}
             title="Steps"
             value={todayStats.steps.toLocaleString()}
             subtitle={`Goal: ${todayStats.stepGoal.toLocaleString()}`}
             progress={(todayStats.steps / todayStats.stepGoal) * 100}
-            color="#007AFF"
+            color={colors.primary}
           />
           
           <StatCard
-            icon={<Ionicons name="flame" size={20} color="#FF3B30" />}
+            icon={<Ionicons name="flame" size={20} color={colors.secondary} />}
             title="Calories"
             value={todayStats.calories}
             subtitle={`Goal: ${todayStats.calorieGoal}`}
             progress={(todayStats.calories / todayStats.calorieGoal) * 100}
-            color="#FF3B30"
+            color={colors.secondary}
           />
         </View>
 
         <View style={styles.statsGrid}>
           <StatCard
-            icon={<Ionicons name="time" size={20} color="#34C759" />}
+            icon={<Ionicons name="time" size={20} color={colors.primary} />}
             title="Active Minutes"
             value={todayStats.activeMinutes}
             subtitle={`Goal: ${todayStats.activeGoal} min`}
             progress={(todayStats.activeMinutes / todayStats.activeGoal) * 100}
-            color="#34C759"
+            color={colors.primary}
           />
           
           <StatCard
-            icon={<Ionicons name="heart" size={20} color="#FF2D55" />}
+            icon={<Ionicons name="heart" size={20} color={colors.accent} />}
             title="Heart Rate"
             value={`${todayStats.heartRate} bpm`}
             subtitle="Resting"
-            color="#FF2D55"
+            color={colors.accent}
           />
         </View>
       </View>
 
       {/* Up Next */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Up Next</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Up Next</Text>
         
         {upcomingWorkouts.map((workout) => (
           <Card key={workout.id} style={styles.workoutCard}>
             <View style={styles.workoutContent}>
-              <View style={[styles.workoutIcon, { backgroundColor: '#007AFF20' }]}>
-                <Ionicons name="fitness" size={20} color="#007AFF" />
+              <View style={[styles.workoutIcon, { backgroundColor: colors.primary + '20' }]}>
+                <Ionicons name="fitness" size={20} color={colors.primary} />
               </View>
               <View style={styles.workoutInfo}>
-                <Text style={styles.workoutTitle}>{workout.title}</Text>
-                <Text style={styles.workoutTime}>
+                <Text style={[styles.workoutTitle, { color: colors.foreground }]}>{workout.title}</Text>
+                <Text style={[styles.workoutTime, { color: colors.mutedForeground }]}>
                   {workout.time} • {workout.duration}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#999" />
+              <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
             </View>
           </Card>
         ))}
@@ -148,42 +156,42 @@ export default function DashboardScreen() {
 
       {/* AI Coach Insights */}
       <View style={styles.section}>
-        <Card style={styles.insightCard}>
+        <Card variant="wellness" style={styles.insightCard}>
           <View style={styles.insightHeader}>
-            <View style={styles.insightIconContainer}>
+            <View style={[styles.insightIconContainer, { backgroundColor: colors.secondary }]}>
               <Ionicons name="sparkles" size={20} color="#fff" />
             </View>
-            <Text style={styles.insightTitle}>AI Coach Insights</Text>
+            <Text style={[styles.insightTitle, { color: colors.foreground }]}>AI Coach Insights</Text>
           </View>
-          <Text style={styles.insightText}>
+          <Text style={[styles.insightText, { color: colors.mutedForeground }]}>
             Your consistency with morning workouts is paying off! Sleep quality
             improved with evening yoga.
           </Text>
           <TouchableOpacity style={styles.insightButton}>
-            <Text style={styles.insightButtonText}>View Details</Text>
-            <Ionicons name="arrow-forward" size={16} color="#007AFF" />
+            <Text style={[styles.insightButtonText, { color: colors.primary }]}>View Details</Text>
+            <Ionicons name="arrow-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
         </Card>
       </View>
 
       {/* Quick Actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Actions</Text>
         
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
-            <Text style={styles.actionText}>Log Activity</Text>
+          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.card }]}>
+            <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>Log Activity</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="sync-outline" size={24} color="#007AFF" />
-            <Text style={styles.actionText}>Sync Data</Text>
+          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.card }]}>
+            <Ionicons name="sync-outline" size={24} color={colors.primary} />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>Sync Data</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.actionButton}>
-            <Ionicons name="calendar-outline" size={24} color="#007AFF" />
-            <Text style={styles.actionText}>Schedule</Text>
+          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.card }]}>
+            <Ionicons name="calendar-outline" size={24} color={colors.primary} />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>Schedule</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -191,45 +199,43 @@ export default function DashboardScreen() {
   );
 }
 
+// Note: Dynamic colors are applied inline using the colors object
+// Static styles use design tokens from the theme
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: Spacing.lg,
+    paddingBottom: Spacing['4xl'],
   },
   header: {
-    marginBottom: 24,
+    marginBottom: Spacing['2xl'],
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    fontSize: Typography.fontSizes['3xl'],
+    fontWeight: Typography.fontWeights.bold,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    fontSize: Typography.fontSizes.sm,
+    lineHeight: Typography.lineHeights.relaxed * Typography.fontSizes.sm,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing['2xl'],
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 12,
+    fontSize: Typography.fontSizes.xl,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: Spacing.md,
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
   },
   workoutCard: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   workoutContent: {
     flexDirection: 'row',
@@ -238,73 +244,66 @@ const styles = StyleSheet.create({
   workoutIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   workoutInfo: {
     flex: 1,
   },
   workoutTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
     marginBottom: 2,
   },
   workoutTime: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: Typography.fontSizes.sm,
   },
   insightCard: {
-    backgroundColor: '#fff',
+    // Card styling handled by Card component
   },
   insightHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   insightIconContainer: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#007AFF',
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   insightTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
   },
   insightText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-    marginBottom: 12,
+    fontSize: Typography.fontSizes.sm,
+    lineHeight: Typography.lineHeights.relaxed * Typography.fontSizes.sm,
+    marginBottom: Spacing.md,
   },
   insightButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
   },
   insightButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginRight: 4,
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
+    marginRight: Spacing.xs,
   },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: Spacing.md,
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
     alignItems: 'center',
     ...Platform.select({
       ios: {
@@ -319,16 +318,13 @@ const styles = StyleSheet.create({
       android: {
         elevation: 3,
       },
-      web: {
-        boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.1)',
-      },
+      default: {},
     }),
   },
   actionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginTop: 8,
+    fontSize: Typography.fontSizes.xs,
+    fontWeight: Typography.fontWeights.semibold,
+    marginTop: Spacing.sm,
     textAlign: 'center',
   },
 });

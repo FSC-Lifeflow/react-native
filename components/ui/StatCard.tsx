@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Card } from './Card';
+import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -11,31 +13,37 @@ interface StatCardProps {
   color?: string;
 }
 
-export function StatCard({ icon, title, value, subtitle, progress, color = '#007AFF' }: StatCardProps) {
+export function StatCard({ icon, title, value, subtitle, progress, color }: StatCardProps) {
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+  const accentColor = color || colors.primary;
+
   return (
     <Card style={styles.container}>
       <View style={styles.header}>
-        <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
+        <View style={[styles.iconContainer, { backgroundColor: `${accentColor}20` }]}>
           {icon}
         </View>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={[styles.title, { color: colors.mutedForeground }]}>{title}</Text>
       </View>
       
-      <Text style={styles.value}>{value}</Text>
+      <Text style={[styles.value, { color: colors.foreground }]}>{value}</Text>
       
-      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+      {subtitle && <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{subtitle}</Text>}
       
       {progress !== undefined && (
         <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
+          <View style={[styles.progressBar, { backgroundColor: colors.muted }]}>
             <View 
               style={[
                 styles.progressFill, 
-                { width: `${Math.min(progress, 100)}%`, backgroundColor: color }
+                { width: `${Math.min(progress, 100)}%`, backgroundColor: accentColor }
               ]} 
             />
           </View>
-          <Text style={styles.progressText}>{Math.round(progress)}%</Text>
+          <Text style={[styles.progressText, { color: colors.mutedForeground }]}>
+            {Math.round(progress)}%
+          </Text>
         </View>
       )}
     </Card>
@@ -50,53 +58,48 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   iconContainer: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   title: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.medium,
   },
   value: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    fontSize: Typography.fontSizes['3xl'],
+    fontWeight: Typography.fontWeights.bold,
+    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 8,
+    fontSize: Typography.fontSizes.xs,
+    marginBottom: Spacing.sm,
   },
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   progressBar: {
     flex: 1,
     height: 6,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 3,
+    borderRadius: BorderRadius.sm,
     overflow: 'hidden',
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: BorderRadius.sm,
   },
   progressText: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
+    fontSize: Typography.fontSizes.xs,
+    fontWeight: Typography.fontWeights.semibold,
     minWidth: 40,
     textAlign: 'right',
   },

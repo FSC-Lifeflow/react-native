@@ -13,6 +13,8 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type SettingItem = {
   icon: string;
@@ -27,6 +29,8 @@ type SettingItem = {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const [notifications, setNotifications] = useState(true);
   const [activitySharing, setActivitySharing] = useState(
     user?.activity_sharing ?? true
@@ -183,12 +187,15 @@ export default function SettingsScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.header}>Settings</Text>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]} 
+      contentContainerStyle={styles.content}
+    >
+      <Text style={[styles.header, { color: colors.foreground }]}>Settings</Text>
 
       {settingsSections.map((section, sectionIndex) => (
         <View key={sectionIndex} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{section.title}</Text>
           <Card style={styles.card}>
             {section.items.map((item, itemIndex) => (
               <View key={itemIndex}>
@@ -202,13 +209,13 @@ export default function SettingsScreen() {
                     <Ionicons
                       name={item.icon as any}
                       size={22}
-                      color="#666"
+                      color={colors.mutedForeground}
                       style={styles.settingIcon}
                     />
                     <View style={styles.settingTextContainer}>
-                      <Text style={styles.settingLabel}>{item.label}</Text>
+                      <Text style={[styles.settingLabel, { color: colors.foreground }]}>{item.label}</Text>
                       {item.subtitle && (
-                        <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
+                        <Text style={[styles.settingSubtitle, { color: colors.mutedForeground }]}>{item.subtitle}</Text>
                       )}
                     </View>
                   </View>
@@ -218,18 +225,18 @@ export default function SettingsScreen() {
                       <Switch
                         value={item.value as boolean}
                         onValueChange={item.onToggle}
-                        trackColor={{ false: '#ddd', true: '#007AFF80' }}
-                        thumbColor={item.value ? '#007AFF' : '#f4f3f4'}
+                        trackColor={{ false: colors.border, true: colors.primary + '80' }}
+                        thumbColor={item.value ? colors.primary : colors.muted}
                       />
                     ) : item.value && typeof item.value === 'string' ? (
-                      <Text style={styles.settingValue}>{item.value}</Text>
+                      <Text style={[styles.settingValue, { color: colors.mutedForeground }]}>{item.value}</Text>
                     ) : item.showChevron ? (
-                      <Ionicons name="chevron-forward" size={20} color="#999" />
+                      <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
                     ) : null}
                   </View>
                 </TouchableOpacity>
                 {itemIndex < section.items.length - 1 && (
-                  <View style={styles.divider} />
+                  <View style={[styles.divider, { backgroundColor: colors.border }]} />
                 )}
               </View>
             ))}
@@ -238,44 +245,46 @@ export default function SettingsScreen() {
       ))}
 
       {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
-        <Text style={styles.logoutText}>Logout</Text>
+      <TouchableOpacity 
+        style={[styles.logoutButton, { backgroundColor: colors.card }]} 
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out-outline" size={20} color={colors.destructive} />
+        <Text style={[styles.logoutText, { color: colors.destructive }]}>Logout</Text>
       </TouchableOpacity>
 
-      <Text style={styles.footer}>
+      <Text style={[styles.footer, { color: colors.mutedForeground }]}>
         Made with ❤️ by the LifeFlow Team
       </Text>
     </ScrollView>
   );
 }
 
+// Note: Dynamic colors are applied inline using the colors object
+// Static styles use design tokens from the theme
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: Spacing.lg,
+    paddingBottom: Spacing['4xl'],
   },
   header: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 24,
+    fontSize: Typography.fontSizes['4xl'],
+    fontWeight: Typography.fontWeights.bold,
+    marginBottom: Spacing['2xl'],
   },
   section: {
-    marginBottom: 24,
+    marginBottom: Spacing['2xl'],
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
-    marginLeft: 4,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing.xs,
   },
   card: {
     padding: 0,
@@ -284,7 +293,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: Spacing.lg,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -292,41 +301,36 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingIcon: {
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   settingTextContainer: {
     flex: 1,
   },
   settingLabel: {
-    fontSize: 16,
-    color: '#1a1a1a',
-    fontWeight: '500',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.medium,
   },
   settingSubtitle: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Typography.fontSizes.sm,
     marginTop: 2,
   },
   settingRight: {
-    marginLeft: 12,
+    marginLeft: Spacing.md,
   },
   settingValue: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Typography.fontSizes.sm,
   },
   divider: {
     height: 1,
-    backgroundColor: '#f0f0f0',
     marginLeft: 50,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 8,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    marginTop: Spacing.sm,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -340,21 +344,17 @@ const styles = StyleSheet.create({
       android: {
         elevation: 3,
       },
-      web: {
-        boxShadow: '0px 2px 3px rgba(0, 0, 0, 0.1)',
-      },
+      default: {},
     }),
   },
   logoutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FF3B30',
-    marginLeft: 8,
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
+    marginLeft: Spacing.sm,
   },
   footer: {
     textAlign: 'center',
-    fontSize: 12,
-    color: '#999',
-    marginTop: 24,
+    fontSize: Typography.fontSizes.xs,
+    marginTop: Spacing['2xl'],
   },
 });

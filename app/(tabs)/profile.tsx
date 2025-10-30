@@ -15,9 +15,13 @@ import { authService } from '@/services/authService';
 import { Card } from '@/components/ui/Card';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function ProfileScreen() {
   const { user, refreshUser } = useAuth();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -83,7 +87,10 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]} 
+      contentContainerStyle={styles.content}
+    >
       {/* Profile Header */}
       <Card style={styles.profileCard}>
         <View style={styles.avatarSection}>
@@ -91,29 +98,34 @@ export default function ProfileScreen() {
             {user?.avatar_url ? (
               <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
             ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={40} color="#999" />
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.muted }]}>
+                <Ionicons name="person" size={40} color={colors.mutedForeground} />
               </View>
             )}
-            <View style={styles.avatarBadge}>
+            <View style={[styles.avatarBadge, { backgroundColor: colors.primary }]}>
               <Ionicons name="camera" size={16} color="#fff" />
             </View>
           </TouchableOpacity>
 
           {!isEditing ? (
             <View style={styles.profileInfo}>
-              <Text style={styles.name}>
+              <Text style={[styles.name, { color: colors.foreground }]}>
                 {user?.first_name} {user?.last_name}
               </Text>
-              <Text style={styles.username}>@{user?.username || 'username'}</Text>
-              <Text style={styles.email}>{user?.email}</Text>
+              <Text style={[styles.username, { color: colors.mutedForeground }]}>@{user?.username || 'username'}</Text>
+              <Text style={[styles.email, { color: colors.mutedForeground }]}>{user?.email}</Text>
             </View>
           ) : (
             <View style={styles.editForm}>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>First Name</Text>
+                <Text style={[styles.label, { color: colors.foreground }]}>First Name</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { 
+                    borderColor: colors.border, 
+                    backgroundColor: colors.muted,
+                    color: colors.foreground 
+                  }]}
+                  placeholderTextColor={colors.mutedForeground}
                   value={formData.first_name}
                   onChangeText={(text) =>
                     setFormData({ ...formData, first_name: text })
@@ -123,9 +135,14 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Last Name</Text>
+                <Text style={[styles.label, { color: colors.foreground }]}>Last Name</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { 
+                    borderColor: colors.border, 
+                    backgroundColor: colors.muted,
+                    color: colors.foreground 
+                  }]}
+                  placeholderTextColor={colors.mutedForeground}
                   value={formData.last_name}
                   onChangeText={(text) =>
                     setFormData({ ...formData, last_name: text })
@@ -135,9 +152,14 @@ export default function ProfileScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Username</Text>
+                <Text style={[styles.label, { color: colors.foreground }]}>Username</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { 
+                    borderColor: colors.border, 
+                    backgroundColor: colors.muted,
+                    color: colors.foreground 
+                  }]}
+                  placeholderTextColor={colors.mutedForeground}
                   value={formData.username}
                   onChangeText={(text) =>
                     setFormData({ ...formData, username: text })
@@ -152,30 +174,30 @@ export default function ProfileScreen() {
 
         {!isEditing ? (
           <TouchableOpacity
-            style={styles.editButton}
+            style={[styles.editButton, { backgroundColor: colors.primary + '10' }]}
             onPress={() => setIsEditing(true)}
           >
-            <Ionicons name="create-outline" size={20} color="#007AFF" />
-            <Text style={styles.editButtonText}>Edit Profile</Text>
+            <Ionicons name="create-outline" size={20} color={colors.primary} />
+            <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit Profile</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.editActions}>
             <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
+              style={[styles.actionButton, styles.cancelButton, { backgroundColor: colors.muted }]}
               onPress={handleCancel}
               disabled={loading}
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text style={[styles.cancelButtonText, { color: colors.mutedForeground }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionButton, styles.saveButton]}
+              style={[styles.actionButton, styles.saveButton, { backgroundColor: colors.primary }]}
               onPress={handleSave}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.saveButtonText}>Save</Text>
+                <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Save</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -186,9 +208,9 @@ export default function ProfileScreen() {
       <View style={styles.statsContainer}>
         {stats.map((stat, index) => (
           <Card key={index} style={styles.statCard}>
-            <Ionicons name={stat.icon as any} size={24} color="#007AFF" />
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statLabel}>{stat.label}</Text>
+            <Ionicons name={stat.icon as any} size={24} color={colors.primary} />
+            <Text style={[styles.statValue, { color: colors.foreground }]}>{stat.value}</Text>
+            <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{stat.label}</Text>
           </Card>
         ))}
       </View>
@@ -196,88 +218,88 @@ export default function ProfileScreen() {
       {/* Fitness Goals */}
       <Card style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Fitness Goals</Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Fitness Goals</Text>
           <TouchableOpacity>
-            <Ionicons name="create-outline" size={20} color="#007AFF" />
+            <Ionicons name="create-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
-        <View style={styles.goalItem}>
-          <Ionicons name="trophy-outline" size={20} color="#666" />
-          <Text style={styles.goalText}>Complete 5 workouts per week</Text>
+        <View style={[styles.goalItem, { borderBottomColor: colors.border }]}>
+          <Ionicons name="trophy-outline" size={20} color={colors.mutedForeground} />
+          <Text style={[styles.goalText, { color: colors.foreground }]}>Complete 5 workouts per week</Text>
         </View>
-        <View style={styles.goalItem}>
-          <Ionicons name="footsteps-outline" size={20} color="#666" />
-          <Text style={styles.goalText}>Walk 10,000 steps daily</Text>
+        <View style={[styles.goalItem, { borderBottomColor: colors.border }]}>
+          <Ionicons name="footsteps-outline" size={20} color={colors.mutedForeground} />
+          <Text style={[styles.goalText, { color: colors.foreground }]}>Walk 10,000 steps daily</Text>
         </View>
-        <View style={styles.goalItem}>
-          <Ionicons name="moon-outline" size={20} color="#666" />
-          <Text style={styles.goalText}>Get 8 hours of sleep</Text>
+        <View style={[styles.goalItem, { borderBottomColor: colors.border }]}>
+          <Ionicons name="moon-outline" size={20} color={colors.mutedForeground} />
+          <Text style={[styles.goalText, { color: colors.foreground }]}>Get 8 hours of sleep</Text>
         </View>
       </Card>
 
       {/* Activity History */}
       <Card style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Activity</Text>
           <TouchableOpacity>
-            <Text style={styles.viewAll}>View All</Text>
+            <Text style={[styles.viewAll, { color: colors.primary }]}>View All</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.activityItem}>
-          <View style={styles.activityIcon}>
-            <Ionicons name="fitness" size={20} color="#007AFF" />
+        <View style={[styles.activityItem, { borderBottomColor: colors.border }]}>
+          <View style={[styles.activityIcon, { backgroundColor: colors.muted }]}>
+            <Ionicons name="fitness" size={20} color={colors.primary} />
           </View>
           <View style={styles.activityInfo}>
-            <Text style={styles.activityTitle}>Morning Cardio</Text>
-            <Text style={styles.activityTime}>Today at 7:00 AM • 45 min</Text>
+            <Text style={[styles.activityTitle, { color: colors.foreground }]}>Morning Cardio</Text>
+            <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>Today at 7:00 AM • 45 min</Text>
           </View>
-          <Text style={styles.activityCalories}>320 cal</Text>
+          <Text style={[styles.activityCalories, { color: colors.secondary }]}>320 cal</Text>
         </View>
-        <View style={styles.activityItem}>
-          <View style={styles.activityIcon}>
-            <Ionicons name="walk" size={20} color="#34C759" />
+        <View style={[styles.activityItem, { borderBottomColor: colors.border }]}>
+          <View style={[styles.activityIcon, { backgroundColor: colors.muted }]}>
+            <Ionicons name="walk" size={20} color={colors.primary} />
           </View>
           <View style={styles.activityInfo}>
-            <Text style={styles.activityTitle}>Evening Walk</Text>
-            <Text style={styles.activityTime}>Yesterday at 6:30 PM • 30 min</Text>
+            <Text style={[styles.activityTitle, { color: colors.foreground }]}>Evening Walk</Text>
+            <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>Yesterday at 6:30 PM • 30 min</Text>
           </View>
-          <Text style={styles.activityCalories}>150 cal</Text>
+          <Text style={[styles.activityCalories, { color: colors.secondary }]}>150 cal</Text>
         </View>
       </Card>
     </ScrollView>
   );
 }
 
+// Note: Dynamic colors are applied inline using the colors object
+// Static styles use design tokens from the theme
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: Spacing.lg,
+    paddingBottom: Spacing['4xl'],
   },
   profileCard: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   avatarSection: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   avatarContainer: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   avatar: {
     width: 100,
     height: 100,
-    borderRadius: 50,
+    borderRadius: BorderRadius.full,
   },
   avatarPlaceholder: {
     width: 100,
     height: 100,
-    borderRadius: 50,
-    backgroundColor: '#f0f0f0',
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -287,8 +309,7 @@ const styles = StyleSheet.create({
     right: 0,
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#007AFF',
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -298,164 +319,143 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   name: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 4,
+    fontSize: Typography.fontSizes['2xl'],
+    fontWeight: Typography.fontWeights.bold,
+    marginBottom: Spacing.xs,
   },
   username: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 4,
+    fontSize: Typography.fontSizes.base,
+    marginBottom: Spacing.xs,
   },
   email: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: Typography.fontSizes.sm,
   },
   editForm: {
     width: '100%',
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: Spacing.sm,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: Typography.fontSizes.base,
   },
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#007AFF10',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
   },
   editButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#007AFF',
-    marginLeft: 8,
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
+    marginLeft: Spacing.sm,
   },
   editActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: Spacing.md,
   },
   actionButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f0f0f0',
+    // Background color applied inline
   },
   cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
   },
   saveButton: {
-    backgroundColor: '#007AFF',
+    // Background color applied inline
   },
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
   },
   statsContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   statCard: {
     flex: 1,
     alignItems: 'center',
-    padding: 16,
+    padding: Spacing.lg,
   },
   statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginTop: 8,
+    fontSize: Typography.fontSizes.xl,
+    fontWeight: Typography.fontWeights.bold,
+    marginTop: Spacing.sm,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    fontSize: Typography.fontSizes.xs,
+    marginTop: Spacing.xs,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontSize: Typography.fontSizes.lg,
+    fontWeight: Typography.fontWeights.semibold,
   },
   viewAll: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '600',
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
   },
   goalItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   goalText: {
-    fontSize: 14,
-    color: '#1a1a1a',
-    marginLeft: 12,
+    fontSize: Typography.fontSizes.sm,
+    marginLeft: Spacing.md,
   },
   activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   activityIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   activityInfo: {
     flex: 1,
   },
   activityTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
     marginBottom: 2,
   },
   activityTime: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: Typography.fontSizes.xs,
   },
   activityCalories: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#007AFF',
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
   },
 });
