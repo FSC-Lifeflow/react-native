@@ -98,11 +98,11 @@ react-native/
 - Auth screens and navigation
 - Secure token storage
 
-### 📋 Phase 2: Core Screens (Next)
+### ✅ Phase 2: Core Screens (COMPLETE)
 - Dashboard with health metrics
-- Profile screen
-- Settings screen
-- Basic UI components
+- Profile screen with avatar upload
+- Settings screen with integrations
+- Reusable UI components (Card, StatCard)
 
 ### 📋 Phase 3: Integrations
 - Fitbit integration (using expo-auth-session)

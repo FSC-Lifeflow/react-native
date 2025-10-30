@@ -15,23 +15,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const ExpoSecureStoreAdapter = {
   getItem: async (key: string) => {
     if (Platform.OS === 'web') {
-      // For web, use localStorage
-      return localStorage.getItem(key);
+      // For web, use localStorage if available
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return localStorage.getItem(key);
+      }
+      return null;
     }
     return await SecureStore.getItemAsync(key);
   },
   setItem: async (key: string, value: string) => {
     if (Platform.OS === 'web') {
-      // For web, use localStorage
-      localStorage.setItem(key, value);
+      // For web, use localStorage if available
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(key, value);
+      }
       return;
     }
     await SecureStore.setItemAsync(key, value);
   },
   removeItem: async (key: string) => {
     if (Platform.OS === 'web') {
-      // For web, use localStorage
-      localStorage.removeItem(key);
+      // For web, use localStorage if available
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.removeItem(key);
+      }
       return;
     }
     await SecureStore.deleteItemAsync(key);

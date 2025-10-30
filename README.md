@@ -55,13 +55,22 @@ React Native mobile application for LifeFlow wellness platform, built with Expo 
 - ✅ Auth context and protected routes
 - ✅ Expo Router navigation
 
-### Coming Soon
+### Phase 2: Core Screens (✅ Complete)
 
-- Dashboard with health metrics
-- Fitbit integration
+- ✅ Dashboard with health metrics (steps, calories, active minutes, heart rate)
+- ✅ Profile management with avatar upload
+- ✅ Settings screen with privacy controls
+- ✅ Reusable UI components (Card, StatCard)
+- ✅ Tab navigation with 4 main screens
+- ✅ Pull-to-refresh functionality
+
+### Coming Soon (Phase 3)
+
+- Fitbit integration with real health data
 - Google Calendar integration
+- Apple Health integration
+- Data visualization with charts
 - Social features
-- Profile management
 - Workout tracking
 
 ## 🏗️ Project Structure
@@ -73,8 +82,15 @@ react-native/
 │   │   ├── sign-in.tsx
 │   │   └── register.tsx
 │   ├── (tabs)/            # Main app tabs
+│   │   ├── index.tsx      # Home screen
+│   │   ├── dashboard.tsx  # Dashboard with metrics
+│   │   ├── profile.tsx    # User profile
+│   │   └── settings.tsx   # App settings
 │   └── _layout.tsx        # Root layout with providers
 ├── components/            # Reusable components
+│   └── ui/                # UI components
+│       ├── Card.tsx       # Card container
+│       └── StatCard.tsx   # Metric card with progress
 ├── contexts/              # React contexts
 │   └── AuthContext.tsx    # Authentication context
 ├── services/              # API services
@@ -129,9 +145,11 @@ npm run lint
 This React Native app is being migrated from the web version in the `frontend` directory. The migration follows this strategy:
 
 1. **Phase 1**: Foundation (Auth, Navigation) - ✅ Complete
-2. **Phase 2**: Core Screens (Dashboard, Profile, Settings)
-3. **Phase 3**: Integrations (Fitbit, Google Calendar)
-4. **Phase 4**: Social Features
+2. **Phase 2**: Core Screens (Dashboard, Profile, Settings) - ✅ Complete
+3. **Phase 3**: Integrations (Fitbit, Google Calendar, Apple Health) - 🚧 Next
+4. **Phase 4**: Social Features - 📋 Planned
+
+See `PHASE2_SUMMARY.md` for detailed Phase 2 implementation notes.
 
 ## 📚 Learn More
 
