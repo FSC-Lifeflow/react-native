@@ -40,8 +40,6 @@ export default function SettingsScreen() {
   );
 
   const handleLogout = async () => {
-    console.log('🔘 Logout button clicked');
-    
     // On web, use window.confirm instead of Alert.alert
     const confirmed = Platform.OS === 'web' 
       ? window.confirm('Are you sure you want to logout?')
@@ -52,17 +50,10 @@ export default function SettingsScreen() {
           ]);
         });
 
-    if (!confirmed) {
-      console.log('⏸️ Logout cancelled');
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      console.log('🚪 Logging out...');
       await logout();
-      console.log('✅ Logout successful, redirecting to sign-in...');
-      // The auth state listener will set user to null
-      // and index.tsx will handle the redirect, but we'll do it explicitly too
       router.replace('/(auth)/sign-in');
     } catch (error) {
       console.error('❌ Logout failed:', error);

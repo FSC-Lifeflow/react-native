@@ -42,8 +42,6 @@ export default function AuthCallback() {
     
     try {
       console.log('🔄 Processing OAuth callback...');
-      console.log('📝 URL params:', params);
-      console.log('📝 Params keys:', Object.keys(params));
 
       // On web, Supabase puts tokens in the hash fragment
       // They come as params['#'] = 'access_token=...&refresh_token=...'
@@ -52,27 +50,13 @@ export default function AuthCallback() {
       let error = params.error as string;
       let errorDescription = params.error_description as string;
 
-      console.log('🔍 Initial token check:', {
-        hasAccessToken: !!accessToken,
-        hasRefreshToken: !!refreshToken,
-        hasHashParam: !!params['#']
-      });
-
       // If tokens aren't directly in params, check the hash fragment
       if (!accessToken && params['#']) {
-        console.log('🔍 Parsing hash fragment:', params['#']);
         const hashParams = new URLSearchParams(params['#'] as string);
         accessToken = hashParams.get('access_token') || '';
         refreshToken = hashParams.get('refresh_token') || '';
         error = hashParams.get('error') || '';
         errorDescription = hashParams.get('error_description') || '';
-        
-        console.log('🔍 After parsing hash:', {
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken,
-          accessTokenLength: accessToken?.length,
-          refreshTokenLength: refreshToken?.length
-        });
       }
 
       if (error) {
@@ -84,11 +68,12 @@ export default function AuthCallback() {
       }
 
       if (accessToken && refreshToken) {
-        console.log('🔑 Setting session with tokens...');
-        console.log('🔑 Access token length:', accessToken.length);
-        console.log('🔑 Refresh token length:', refreshToken.length);
+        // Navigate FIRST, then set the session
+        // This prevents the auth state change from unmounting this component
+        setIsProcessing(false);
+        router.replace('/(tabs)/dashboard');
         
-        // Set the session in Supabase
+        // Now set the session in Supabase
         const { data, error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -96,35 +81,11 @@ export default function AuthCallback() {
 
         if (sessionError) {
           console.error('❌ Session error:', sessionError);
-          alert('Failed to set session. Please try again.');
-          setIsProcessing(false);
-          setTimeout(() => router.replace('/(auth)/sign-in'), 100);
-          return;
-        }
-
-        console.log('✅ Session set successfully!');
-        console.log('👤 User:', data.user?.email);
-        console.log('👤 User ID:', data.user?.id);
-        console.log('🚀 Redirecting to dashboard...');
-
-        // Auth state has changed, now redirect immediately
-        setIsProcessing(false);
-        
-        // Try navigation
-        console.log('🔄 Attempting navigation to /(tabs)/dashboard');
-        try {
-          router.push('/(tabs)/dashboard');
-          console.log('✅ Navigation command executed');
-        } catch (navError) {
-          console.error('❌ Navigation error:', navError);
-          // Fallback: try replace instead
-          console.log('🔄 Trying router.replace as fallback');
-          router.replace('/(tabs)/dashboard');
+        } else {
+          console.log('✅ OAuth login successful:', data.user?.email);
         }
       } else {
         console.error('❌ No tokens found in callback URL');
-        console.error('❌ accessToken:', !!accessToken);
-        console.error('❌ refreshToken:', !!refreshToken);
         alert('Authentication failed. Please try again.');
         setIsProcessing(false);
         setTimeout(() => router.replace('/(auth)/sign-in'), 100);

@@ -88,7 +88,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
         if (session?.user) {
           const currentUser = await authService.getCurrentUser();
           setUser(currentUser);
@@ -171,11 +170,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
    */
   const logout = async () => {
     try {
-      console.log('🔓 Calling authService.logout()...');
       await authService.logout();
-      console.log('✅ Auth service logout successful');
       setUser(null);
-      console.log('✅ User state cleared');
+      console.log('✅ Logout successful');
     } catch (err) {
       console.error('❌ Logout failed:', err);
       throw err;
