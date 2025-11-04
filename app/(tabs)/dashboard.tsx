@@ -7,37 +7,36 @@ import {
   TouchableOpacity,
   RefreshControl,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFitbit } from '@/hooks/useFitbit';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card } from '@/components/ui/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { router } from 'expo-router';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const [refreshing, setRefreshing] = React.useState(false);
+  const { isConnected, isLoading, data, error, refresh } = useFitbit();
 
-  const onRefresh = React.useCallback(() => {
-    setRefreshing(true);
-    // Simulate data refresh
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  }, []);
+  const onRefresh = React.useCallback(async () => {
+    await refresh();
+  }, [refresh]);
 
-  // Mock data - will be replaced with real data from Fitbit/Health APIs
+  // Use Fitbit data if available, otherwise use mock data
   const todayStats = {
-    steps: 7842,
+    steps: data.activity?.steps || 0,
     stepGoal: 10000,
-    calories: 320,
+    calories: data.activity?.calories || 0,
     calorieGoal: 500,
-    activeMinutes: 25,
+    activeMinutes: data.activity?.activeMinutes || 0,
     activeGoal: 45,
-    heartRate: 72,
+    heartRate: data.heartRate?.restingHeartRate || 0,
   };
 
   const upcomingWorkouts = [
@@ -70,7 +69,7 @@ export default function DashboardScreen() {
       contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl 
-          refreshing={refreshing} 
+          refreshing={isLoading} 
           onRefresh={onRefresh}
           tintColor={colors.primary}
         />
@@ -87,6 +86,34 @@ export default function DashboardScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Fitbit Connection Banner */}
+      {!isConnected && (
+        <Card style={styles.connectionBanner}>
+          <View style={styles.bannerContent}>
+            <Ionicons name="link-outline" size={24} color={colors.primary} />
+            <View style={styles.bannerText}>
+              <Text style={[styles.bannerTitle, { color: colors.foreground }]}>
+                Connect Your Fitbit
+              </Text>
+              <Text style={[styles.bannerSubtitle, { color: colors.mutedForeground }]}>
+                {Platform.OS === 'web' 
+                  ? 'Available on mobile apps (iOS/Android)'
+                  : 'Get real-time health data and personalized insights'
+                }
+              </Text>
+            </View>
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity 
+                style={[styles.connectButton, { backgroundColor: colors.primary }]}
+                onPress={() => router.push('/(tabs)/settings')}
+              >
+                <Text style={styles.connectButtonText}>Connect</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Card>
+      )}
 
       {/* Today's Progress */}
       <View style={styles.section}>
@@ -326,5 +353,34 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeights.semibold,
     marginTop: Spacing.sm,
     textAlign: 'center',
+  },
+  connectionBanner: {
+    marginBottom: Spacing.xl,
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  bannerText: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: 2,
+  },
+  bannerSubtitle: {
+    fontSize: Typography.fontSizes.sm,
+  },
+  connectButton: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  connectButtonText: {
+    color: '#fff',
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
   },
 });

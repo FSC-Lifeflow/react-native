@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFitbit } from '@/hooks/useFitbit';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -12,6 +13,7 @@ import {
   Switch,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -31,6 +33,7 @@ export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const { isConnected: fitbitConnected, isLoading: fitbitLoading, connect: connectFitbit, disconnect: disconnectFitbit } = useFitbit();
   const [notifications, setNotifications] = useState(true);
   const [activitySharing, setActivitySharing] = useState(
     user?.activity_sharing ?? true
@@ -38,6 +41,44 @@ export default function SettingsScreen() {
   const [socialPrivacy, setSocialPrivacy] = useState(
     user?.social_privacy ?? false
   );
+
+  const handleFitbitPress = async () => {
+    // Fitbit OAuth doesn't work on web due to CORS restrictions
+    // It requires a backend proxy server
+    if (Platform.OS === 'web') {
+      window.alert(
+        'Fitbit integration is only available on mobile apps.\n\n' +
+        'Due to browser security restrictions (CORS), Fitbit OAuth requires a backend server. ' +
+        'Please use the iOS or Android app to connect your Fitbit device.'
+      );
+      return;
+    }
+
+    if (fitbitConnected) {
+      // Disconnect
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert('Disconnect Fitbit', 'Are you sure you want to disconnect from Fitbit?', [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Disconnect', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+      
+      if (confirmed) {
+        const success = await disconnectFitbit();
+        if (success) {
+          Alert.alert('Success', 'Disconnected from Fitbit');
+        }
+      }
+    } else {
+      // Connect
+      const success = await connectFitbit();
+      if (success) {
+        Alert.alert('Success', 'Connected to Fitbit!');
+      } else {
+        Alert.alert('Error', 'Failed to connect to Fitbit. Please try again.');
+      }
+    }
+  };
 
   const handleLogout = async () => {
     // On web, use window.confirm instead of Alert.alert
@@ -132,8 +173,8 @@ export default function SettingsScreen() {
         {
           icon: 'fitness-outline',
           label: 'Fitbit',
-          subtitle: 'Not connected',
-          onPress: () => Alert.alert('Coming Soon', 'Fitbit integration will be available in Phase 3'),
+          subtitle: fitbitConnected ? 'Connected' : 'Not connected',
+          onPress: handleFitbitPress,
           showChevron: true,
         },
         {
