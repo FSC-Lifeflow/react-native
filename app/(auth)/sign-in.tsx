@@ -44,13 +44,14 @@ export default function SignInScreen() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      router.replace('/(tabs)');
+      // On web, OAuth redirects to callback route which handles navigation
+      // On mobile, we need to manually navigate after successful auth
+      // The callback route will handle the redirect, so we don't need to do it here
     } catch (error) {
       Alert.alert(
         'Google Sign In Failed',
         error instanceof Error ? error.message : 'An error occurred'
       );
-    } finally {
       setLoading(false);
     }
   };

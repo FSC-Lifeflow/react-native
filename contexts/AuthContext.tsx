@@ -171,10 +171,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
    */
   const logout = async () => {
     try {
+      console.log('🔓 Calling authService.logout()...');
       await authService.logout();
+      console.log('✅ Auth service logout successful');
       setUser(null);
+      console.log('✅ User state cleared');
     } catch (err) {
-      console.error('Logout failed:', err);
+      console.error('❌ Logout failed:', err);
       throw err;
     }
   };

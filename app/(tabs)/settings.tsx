@@ -39,22 +39,39 @@ export default function SettingsScreen() {
     user?.social_privacy ?? false
   );
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await logout();
-            router.replace('/(auth)/sign-in');
-          } catch (error) {
-            Alert.alert('Error', 'Failed to logout');
-          }
-        },
-      },
-    ]);
+  const handleLogout = async () => {
+    console.log('🔘 Logout button clicked');
+    
+    // On web, use window.confirm instead of Alert.alert
+    const confirmed = Platform.OS === 'web' 
+      ? window.confirm('Are you sure you want to logout?')
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert('Logout', 'Are you sure you want to logout?', [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Logout', style: 'destructive', onPress: () => resolve(true) },
+          ]);
+        });
+
+    if (!confirmed) {
+      console.log('⏸️ Logout cancelled');
+      return;
+    }
+
+    try {
+      console.log('🚪 Logging out...');
+      await logout();
+      console.log('✅ Logout successful, redirecting to sign-in...');
+      // The auth state listener will set user to null
+      // and index.tsx will handle the redirect, but we'll do it explicitly too
+      router.replace('/(auth)/sign-in');
+    } catch (error) {
+      console.error('❌ Logout failed:', error);
+      if (Platform.OS === 'web') {
+        window.alert('Failed to logout. Please try again.');
+      } else {
+        Alert.alert('Error', 'Failed to logout. Please try again.');
+      }
+    }
   };
 
   const settingsSections: Array<{ title: string; items: SettingItem[] }> = [
