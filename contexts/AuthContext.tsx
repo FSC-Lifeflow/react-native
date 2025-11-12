@@ -172,10 +172,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     try {
       await authService.logout();
       setUser(null);
-      console.log('✅ Logout successful');
     } catch (err) {
-      console.error('❌ Logout failed:', err);
-      throw err;
+      // Even if logout fails, clear the user state locally
+      setUser(null);
+      // Don't throw - allow logout to complete
     }
   };
 

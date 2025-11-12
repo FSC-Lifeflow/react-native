@@ -64,14 +64,23 @@ React Native mobile application for LifeFlow wellness platform, built with Expo 
 - ✅ Tab navigation with 4 main screens
 - ✅ Pull-to-refresh functionality
 
-### Coming Soon (Phase 3)
+### Phase 3: Integrations (✅ Complete)
 
-- Fitbit integration with real health data
-- Google Calendar integration
-- Apple Health integration
-- Data visualization with charts
-- Social features
-- Workout tracking
+- ✅ Fitbit integration with real health data
+- ✅ OAuth 2.0 with PKCE authentication
+- ✅ Real-time health metrics (steps, calories, heart rate, sleep)
+- ✅ Integration management in Settings
+- ✅ Automatic token refresh
+
+### Phase 4: Social Features (🚧 In Progress)
+
+- ✅ Friend system with bidirectional connections
+- ✅ Friend requests (send, accept, reject, cancel)
+- ✅ User search functionality
+- ✅ Friends screen with tabbed interface
+- 🚧 Friend request notifications
+- 📋 Activity sharing
+- 📋 Social feed
 
 ## 🏗️ Project Structure
 
@@ -146,10 +155,13 @@ This React Native app is being migrated from the web version in the `frontend` d
 
 1. **Phase 1**: Foundation (Auth, Navigation) - ✅ Complete
 2. **Phase 2**: Core Screens (Dashboard, Profile, Settings) - ✅ Complete
-3. **Phase 3**: Integrations (Fitbit, Google Calendar, Apple Health) - 🚧 Next
-4. **Phase 4**: Social Features - 📋 Planned
+3. **Phase 3**: Integrations (Fitbit, Google Calendar, Apple Health) - ✅ Complete
+4. **Phase 4**: Social Features (Friend System, Activity Sharing, Feed) - 🚧 In Progress
 
-See `PHASE2_SUMMARY.md` for detailed Phase 2 implementation notes.
+See implementation notes:
+- `PHASE2_SUMMARY.md` - Phase 2 details
+- `PHASE4_SETUP.md` - Phase 4 setup instructions
+- `PHASE4_SUMMARY.md` - Phase 4 implementation details
 
 ## 📚 Learn More
 

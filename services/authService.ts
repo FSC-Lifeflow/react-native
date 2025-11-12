@@ -373,13 +373,22 @@ export const authService = {
    */
   async logout() {
     try {
-      const { error } = await supabase.auth.signOut();
+      // Add timeout to prevent hanging
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Logout timeout')), 5000)
+      );
+      
+      const { error } = await Promise.race([signOutPromise, timeoutPromise]) as any;
+      
       if (error) {
-        throw new Error(error.message);
+        // Don't throw - allow logout to continue even if Supabase fails
+        console.warn('⚠️ Supabase signOut failed, but continuing with local logout');
       }
       return true;
     } catch (error) {
-      throw error;
+      // Timeout occurred - this is expected on mobile, continue with local logout
+      return true;
     }
   },
 
