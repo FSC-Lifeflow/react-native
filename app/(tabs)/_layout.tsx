@@ -20,10 +20,10 @@ export default function TabLayout() {
         },
       }}>
       <Tabs.Screen
-        name="index"
+        name="feed"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
+          title: 'Feed',
+          tabBarIcon: ({ color }) => <Ionicons name="newspaper" size={24} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -31,6 +31,12 @@ export default function TabLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null, // Hide from tabs
         }}
       />
       <Tabs.Screen

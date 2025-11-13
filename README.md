@@ -72,15 +72,17 @@ React Native mobile application for LifeFlow wellness platform, built with Expo 
 - ✅ Integration management in Settings
 - ✅ Automatic token refresh
 
-### Phase 4: Social Features (🚧 In Progress)
+### Phase 4: Social Features (✅ Complete)
 
 - ✅ Friend system with bidirectional connections
 - ✅ Friend requests (send, accept, reject, cancel)
 - ✅ User search functionality
 - ✅ Friends screen with tabbed interface
-- 🚧 Friend request notifications
-- 📋 Activity sharing
-- 📋 Social feed
+- ✅ Social feed with posts from friends
+- ✅ Create posts with text and images
+- ✅ Like/unlike posts with optimistic updates
+- ✅ Delete own posts
+- ✅ Image upload to Supabase Storage
 
 ## 🏗️ Project Structure
 

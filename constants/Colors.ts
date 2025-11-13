@@ -23,6 +23,8 @@ export const Colors = {
     // Base colors
     background: hslToRgb(120, 20, 98), // Soft sage background
     foreground: hslToRgb(150, 25, 15), // Deep forest text
+    text: hslToRgb(150, 25, 15), // Alias for foreground
+    subtext: hslToRgb(150, 15, 45), // Muted text
     
     // Card colors
     card: '#FFFFFF',
@@ -63,6 +65,8 @@ export const Colors = {
     // Base colors
     background: hslToRgb(150, 15, 12),
     foreground: hslToRgb(120, 20, 95),
+    text: hslToRgb(120, 20, 95), // Alias for foreground
+    subtext: hslToRgb(120, 15, 70), // Muted text
     
     // Card colors
     card: hslToRgb(150, 12, 18),
@@ -187,6 +191,32 @@ export const Typography = {
     tight: 1.2,
     normal: 1.5,
     relaxed: 1.75,
+  },
+  // Pre-defined text styles
+  h1: {
+    fontSize: 32,
+    fontWeight: '700' as const,
+    lineHeight: 38,
+  },
+  h2: {
+    fontSize: 24,
+    fontWeight: '600' as const,
+    lineHeight: 32,
+  },
+  h3: {
+    fontSize: 20,
+    fontWeight: '600' as const,
+    lineHeight: 28,
+  },
+  body: {
+    fontSize: 16,
+    fontWeight: '400' as const,
+    lineHeight: 24,
+  },
+  caption: {
+    fontSize: 14,
+    fontWeight: '400' as const,
+    lineHeight: 20,
   },
 };
 
