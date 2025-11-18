@@ -50,12 +50,26 @@ export default function RegisterScreen() {
         email,
         password,
       });
+      // Only navigate if registration and login succeeded
       router.replace('/(tabs)');
     } catch (error) {
-      Alert.alert(
-        'Registration Failed',
-        error instanceof Error ? error.message : 'An error occurred'
-      );
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      
+      // Check if it's an email confirmation error
+      if (errorMessage.includes('email')) {
+        Alert.alert(
+          'Check Your Email',
+          errorMessage,
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace('/(auth)/sign-in'),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Registration Failed', errorMessage);
+      }
     } finally {
       setLoading(false);
     }

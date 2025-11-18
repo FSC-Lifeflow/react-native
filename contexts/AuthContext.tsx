@@ -74,10 +74,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const currentUser = await authService.getCurrentUser();
-        setUser(currentUser);
+        console.log('AuthContext - Starting auth check...');
+        const currentUser = await Promise.race([
+          authService.getCurrentUser(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Auth check timeout')), 3000)
+          )
+        ]);
+        console.log('AuthContext - Auth check complete, user:', currentUser ? 'exists' : 'null');
+        setUser(currentUser as User | null);
       } catch (err) {
-        console.error('Auth check failed:', err);
+        // Timeout or error - assume no user and continue
+        console.log('AuthContext - No cached session found, continuing as logged out');
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -152,10 +161,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     setLoading(true);
     setError(null);
     try {
-      await authService.register(userData);
-      // Auto-login after registration
-      await login(userData.email, userData.password);
+      console.log('AuthContext - Starting registration...');
+      const result = await authService.register(userData);
+      console.log('AuthContext - Registration result received');
+      
+      // Check if email confirmation is required
+      if (result.user && !result.session) {
+        // Email confirmation required - don't auto-login
+        console.log('📧 Email confirmation required');
+        setLoading(false);
+        throw new Error('Please check your email to confirm your account before signing in.');
+      }
+      
+      // If we have a session, user is automatically logged in
+      if (result.session && result.user) {
+        console.log('✅ User registered and logged in, fetching user data...');
+        const currentUser = await authService.getCurrentUser();
+        console.log('✅ User data fetched:', currentUser ? 'success' : 'null');
+        setUser(currentUser);
+      } else {
+        // Try to login if no session but user exists
+        console.log('⚠️ No session, attempting login...');
+        await login(userData.email, userData.password);
+      }
+      console.log('AuthContext - Registration complete');
     } catch (err) {
+      console.error('AuthContext - Registration error:', err);
       const errorMessage =
         err instanceof Error ? err.message : 'Registration failed';
       setError(errorMessage);

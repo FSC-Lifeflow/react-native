@@ -45,8 +45,10 @@ export const authService = {
   }) {
     try {
       console.log('🚀 Starting registration for:', userData.email);
+      console.log('📡 Calling Supabase signUp...');
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Add timeout wrapper
+      const signUpPromise = supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
@@ -58,6 +60,24 @@ export const authService = {
         },
       });
 
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => {
+          console.error('⏱️ Supabase signUp timeout - this usually means:');
+          console.error('1. Network connectivity issue');
+          console.error('2. Supabase project is paused or unreachable');
+          console.error('3. Invalid Supabase URL/key in .env');
+          reject(new Error('Registration timed out. Please check your Supabase project status and internet connection.'));
+        }, 15000)
+      );
+
+      const { data: authData, error: authError } = await Promise.race([
+        signUpPromise,
+        timeoutPromise,
+      ]);
+
+      console.log('📬 Received response from Supabase');
+      console.log('Response data:', JSON.stringify(authData, null, 2));
+
       if (authError) {
         console.error('❌ Auth signup error:', authError);
         throw new Error(authError.message);
@@ -68,7 +88,13 @@ export const authService = {
         throw new Error('Failed to create user');
       }
 
-      console.log('✅ Auth user created');
+      console.log('✅ Auth user created, ID:', authData.user.id);
+      console.log('📝 Session exists:', !!authData.session);
+
+      // Note: User record should be created by Supabase trigger
+      // If you need to manually create it, ensure RLS policies allow it
+      
+      console.log('🎉 Registration complete, returning data');
       return authData;
     } catch (error) {
       console.error('❌ Registration failed:', error);
