@@ -5,8 +5,11 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/authService';
 import { supabase } from '../lib/supabase';
+
+const SESSION_KEY = 'lifeflow_session';
 
 /**
  * User type definition matching the database schema
@@ -75,17 +78,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     const checkAuth = async () => {
       try {
         console.log('AuthContext - Starting auth check...');
-        const currentUser = await Promise.race([
-          authService.getCurrentUser(),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Auth check timeout')), 3000)
-          )
-        ]);
-        console.log('AuthContext - Auth check complete, user:', currentUser ? 'exists' : 'null');
-        setUser(currentUser as User | null);
+        
+        // Try to restore session from AsyncStorage
+        const sessionJson = await AsyncStorage.getItem(SESSION_KEY);
+        if (sessionJson) {
+          console.log('📦 Found stored session, restoring...');
+          const session = JSON.parse(sessionJson);
+          
+          // Restore session to Supabase
+          const { data, error } = await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          });
+          
+          if (error) {
+            console.error('❌ Failed to restore session:', error);
+            await AsyncStorage.removeItem(SESSION_KEY);
+            setUser(null);
+          } else if (data.user) {
+            console.log('✅ Session restored successfully');
+            const currentUser = await authService.getCurrentUser();
+            setUser(currentUser as User | null);
+          }
+        } else {
+          console.log('📭 No stored session found');
+          setUser(null);
+        }
       } catch (err) {
-        // Timeout or error - assume no user and continue
-        console.log('AuthContext - No cached session found, continuing as logged out');
+        console.error('AuthContext - Auth check error:', err);
         setUser(null);
       } finally {
         setLoading(false);
@@ -94,13 +114,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
     checkAuth();
 
-    // Listen for auth state changes
+    // Listen for auth state changes and manually persist sessions
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('🔔 Auth state change:', event);
+        
         if (session?.user) {
+          // Save session to AsyncStorage
+          console.log('💾 Saving session to storage...');
+          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          }));
+          
           const currentUser = await authService.getCurrentUser();
           setUser(currentUser);
         } else {
+          // Clear session from storage
+          console.log('🗑️ Clearing session from storage...');
+          await AsyncStorage.removeItem(SESSION_KEY);
           setUser(null);
         }
       }

@@ -117,17 +117,16 @@ The app uses Supabase for authentication with the following features:
 
 - **Email/Password**: Traditional sign up and login
 - **Google OAuth**: Mobile-optimized OAuth flow using `expo-auth-session`
-- **Secure Storage**: Tokens stored using `expo-secure-store`
+- **Secure Storage**: Tokens stored using `expo-secure-store` and `AsyncStorage`
 - **Auto-refresh**: Automatic token refresh
-- **Session Persistence**: ⚠️ **Currently disabled** due to React Native compatibility issues
+- **Session Persistence**: ✅ Enabled with custom storage adapter
 
-### ⚠️ Known Issues
+### 🔧 Technical Implementation
 
-**Session Persistence Disabled**: The Supabase `persistSession` feature is currently disabled in `lib/supabase.ts` because it causes auth methods (signUp, signIn) to hang indefinitely in React Native. This means:
-- Users must re-login after closing the app
-- Sessions are not persisted between app restarts
-
-**TODO**: Implement custom session persistence using AsyncStorage directly to work around this Supabase React Native compatibility issue. See `lib/supabase.ts` for implementation notes.
+**Custom Session Storage**: We use a hybrid storage approach in `lib/supabase.ts`:
+- Auth tokens are stored in `AsyncStorage` (to avoid React Native hanging issues)
+- Other sensitive data uses `SecureStore` for enhanced security
+- This workaround enables session persistence while avoiding Supabase React Native compatibility issues
 
 ## 🛠️ Tech Stack
 

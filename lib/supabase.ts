@@ -82,15 +82,46 @@ const ExpoSecureStoreAdapter = {
   },
 };
 
-// Create Supabase client with custom storage
+// Create a custom storage adapter that uses AsyncStorage for all auth data
+// This avoids the hanging issue with SecureStore and large session data
+const CustomSessionStorage = {
+  async getItem(key: string) {
+    try {
+      console.log('📖 CustomStorage getItem:', key);
+      const value = await AsyncStorage.getItem(key);
+      console.log('📖 CustomStorage got value:', value ? 'exists' : 'null');
+      return value;
+    } catch (error) {
+      console.error('CustomSessionStorage getItem error:', error);
+      return null;
+    }
+  },
+  async setItem(key: string, value: string) {
+    try {
+      console.log('💾 CustomStorage setItem:', key, 'length:', value.length);
+      await AsyncStorage.setItem(key, value);
+      console.log('✅ CustomStorage setItem complete');
+    } catch (error) {
+      console.error('CustomSessionStorage setItem error:', error);
+    }
+  },
+  async removeItem(key: string) {
+    try {
+      console.log('🗑️ CustomStorage removeItem:', key);
+      await AsyncStorage.removeItem(key);
+    } catch (error) {
+      console.error('CustomSessionStorage removeItem error:', error);
+    }
+  },
+};
+
+// Create Supabase client WITHOUT session persistence to avoid hanging
+// We'll handle session persistence manually in AuthContext
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Note: persistSession is disabled because it causes signUp to hang in React Native
-    // Users will need to re-login after app restart
-    // TODO: Investigate alternative storage solutions or Supabase RN compatibility
-    storage: ExpoSecureStoreAdapter,
+    storage: undefined, // Don't use any storage adapter
     autoRefreshToken: true,
-    persistSession: false,
+    persistSession: false, // Disable to prevent hanging
     detectSessionInUrl: false,
   },
   global: {

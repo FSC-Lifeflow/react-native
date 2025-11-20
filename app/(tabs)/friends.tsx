@@ -12,6 +12,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -24,6 +25,7 @@ type TabType = 'friends' | 'requests' | 'search';
 export default function FriendsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -221,7 +223,7 @@ export default function FriendsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
+      <View style={[styles.header, { backgroundColor: colors.card, paddingTop: insets.top + 16 }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Friends</Text>
         <View style={styles.headerStats}>
           <View style={styles.statItem}>
@@ -350,7 +352,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 60,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },

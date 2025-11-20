@@ -12,7 +12,9 @@ import {
   Modal,
   Alert,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -25,6 +27,7 @@ export default function FeedScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   
   const { posts, isLoading, refetch } = useFriendPosts();
   const { createPost, isCreating } = useCreatePost();
@@ -165,7 +168,7 @@ export default function FeedScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.card }]}>
+      <View style={[styles.header, { backgroundColor: colors.card, paddingTop: insets.top + 16 }]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Feed</Text>
         <TouchableOpacity
           style={[styles.createButton, { backgroundColor: colors.tint }]}
@@ -202,7 +205,15 @@ export default function FeedScreen() {
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowCreateModal(false)}
+          />
           <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setShowCreateModal(false)}>
@@ -225,34 +236,36 @@ export default function FeedScreen() {
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
-              placeholder="What's on your mind?"
-              placeholderTextColor={colors.foreground + '80'}
-              value={newPostContent}
-              onChangeText={setNewPostContent}
-              multiline
-              maxLength={500}
-            />
+            <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
+                placeholder="What's on your mind?"
+                placeholderTextColor={colors.foreground + '80'}
+                value={newPostContent}
+                onChangeText={setNewPostContent}
+                multiline
+                maxLength={500}
+              />
 
-            {selectedImage && (
-              <View style={styles.imagePreview}>
-                <Image source={{ uri: selectedImage }} style={styles.previewImage} />
-                <TouchableOpacity
-                  style={styles.removeImageButton}
-                  onPress={() => setSelectedImage(null)}
-                >
-                  <Ionicons name="close-circle" size={28} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
+              {selectedImage && (
+                <View style={styles.imagePreview}>
+                  <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={() => setSelectedImage(null)}
+                  >
+                    <Ionicons name="close-circle" size={28} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              )}
 
-            <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickImage}>
-              <Ionicons name="image-outline" size={24} color={colors.tint} />
-              <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickImage}>
+                <Ionicons name="image-outline" size={24} color={colors.tint} />
+                <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -266,7 +279,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 60,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },
@@ -370,14 +382,20 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
     padding: Spacing.lg,
-    minHeight: 400,
+    maxHeight: '80%',
+  },
+  modalScroll: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
