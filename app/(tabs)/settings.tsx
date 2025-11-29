@@ -15,6 +15,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -33,6 +34,7 @@ export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
   const { isConnected: fitbitConnected, isLoading: fitbitLoading, connect: connectFitbit, disconnect: disconnectFitbit } = useFitbit();
   const [notifications, setNotifications] = useState(true);
   const [activitySharing, setActivitySharing] = useState(
@@ -238,7 +240,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.background }]} 
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
     >
       <Text style={[styles.header, { color: colors.foreground }]}>Settings</Text>
 

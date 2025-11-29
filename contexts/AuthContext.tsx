@@ -77,31 +77,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('AuthContext - Starting auth check...');
-        
         // Try to restore session from AsyncStorage
         const sessionJson = await AsyncStorage.getItem(SESSION_KEY);
         if (sessionJson) {
-          console.log('📦 Found stored session, restoring...');
           const session = JSON.parse(sessionJson);
           
-          // Restore session to Supabase
-          const { data, error } = await supabase.auth.setSession({
+          // Skip setSession and just fetch user data directly using the stored session
+          // Set the session in background without waiting
+          supabase.auth.setSession({
             access_token: session.access_token,
             refresh_token: session.refresh_token,
+          }).catch(() => {
+            // Ignore errors, we'll fetch user data anyway
           });
           
-          if (error) {
-            console.error('❌ Failed to restore session:', error);
+          // Decode the JWT to get user ID without waiting for setSession
+          try {
+            const payload = JSON.parse(atob(session.access_token.split('.')[1]));
+            const userId = payload.sub;
+            
+            // Fetch user data directly from database
+            const { data: userRecord } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', userId)
+              .maybeSingle();
+            
+            if (userRecord) {
+              setUser(userRecord as User);
+            } else {
+              await AsyncStorage.removeItem(SESSION_KEY);
+              setUser(null);
+            }
+          } catch (decodeError) {
+            // If token is invalid, clear it
             await AsyncStorage.removeItem(SESSION_KEY);
             setUser(null);
-          } else if (data.user) {
-            console.log('✅ Session restored successfully');
-            const currentUser = await authService.getCurrentUser();
-            setUser(currentUser as User | null);
           }
         } else {
-          console.log('📭 No stored session found');
           setUser(null);
         }
       } catch (err) {
@@ -114,33 +127,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
     checkAuth();
 
-    // Listen for auth state changes and manually persist sessions
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔔 Auth state change:', event);
-        
-        if (session?.user) {
-          // Save session to AsyncStorage
-          console.log('💾 Saving session to storage...');
-          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-          }));
-          
-          const currentUser = await authService.getCurrentUser();
-          setUser(currentUser);
-        } else {
-          // Clear session from storage
-          console.log('🗑️ Clearing session from storage...');
-          await AsyncStorage.removeItem(SESSION_KEY);
-          setUser(null);
-        }
-      }
-    );
-
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
+    // Note: Auth state listener disabled due to React Native hanging issues
+    // Session persistence is handled manually in checkAuth and login/logout functions
   }, []);
 
   /**
@@ -151,6 +139,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     setError(null);
     try {
       const { user } = await authService.login({ email, password });
+      
+      // Get session from Supabase and save to AsyncStorage
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }));
+      }
+      
       setUser(user);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Login failed';

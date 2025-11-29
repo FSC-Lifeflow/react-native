@@ -205,67 +205,74 @@ export default function FeedScreen() {
         transparent={true}
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
+        <View style={styles.modalOverlay}>
           <TouchableOpacity 
             style={styles.modalBackdrop} 
             activeOpacity={1} 
             onPress={() => setShowCreateModal(false)}
           />
-          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <Ionicons name="close" size={28} color={colors.foreground} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create Post</Text>
-              <TouchableOpacity
-                onPress={handleCreatePost}
-                disabled={isCreating || (!newPostContent.trim() && !selectedImage)}
-              >
-                <Text
-                  style={[
-                    styles.postButton,
-                    { color: colors.tint },
-                    (isCreating || (!newPostContent.trim() && !selectedImage)) && styles.postButtonDisabled,
-                  ]}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardView}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                  <Ionicons name="close" size={28} color={colors.foreground} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create Post</Text>
+                <TouchableOpacity
+                  onPress={handleCreatePost}
+                  disabled={isCreating || (!newPostContent.trim() && !selectedImage)}
                 >
-                  {isCreating ? 'Posting...' : 'Post'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalScroll} keyboardShouldPersistTaps="handled">
-              <TextInput
-                style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
-                placeholder="What's on your mind?"
-                placeholderTextColor={colors.foreground + '80'}
-                value={newPostContent}
-                onChangeText={setNewPostContent}
-                multiline
-                maxLength={500}
-              />
-
-              {selectedImage && (
-                <View style={styles.imagePreview}>
-                  <Image source={{ uri: selectedImage }} style={styles.previewImage} />
-                  <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => setSelectedImage(null)}
+                  <Text
+                    style={[
+                      styles.postButton,
+                      { color: colors.tint },
+                      (isCreating || (!newPostContent.trim() && !selectedImage)) && styles.postButtonDisabled,
+                    ]}
                   >
-                    <Ionicons name="close-circle" size={28} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-              )}
+                    {isCreating ? 'Posting...' : 'Post'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickImage}>
-                <Ionicons name="image-outline" size={24} color={colors.tint} />
-                <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
+              <ScrollView 
+                style={styles.modalScroll} 
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <TextInput
+                  style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
+                  placeholder="What's on your mind?"
+                  placeholderTextColor={colors.foreground + '80'}
+                  value={newPostContent}
+                  onChangeText={setNewPostContent}
+                  multiline
+                  maxLength={500}
+                  autoFocus
+                />
+
+                {selectedImage && (
+                  <View style={styles.imagePreview}>
+                    <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => setSelectedImage(null)}
+                    >
+                      <Ionicons name="close-circle" size={28} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickImage}>
+                  <Ionicons name="image-outline" size={24} color={colors.tint} />
+                  <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
@@ -388,6 +395,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
+  modalKeyboardView: {
+    justifyContent: 'flex-end',
+  },
   modalContent: {
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
@@ -395,7 +405,7 @@ const styles = StyleSheet.create({
     maxHeight: '80%',
   },
   modalScroll: {
-    flex: 1,
+    flexGrow: 0,
   },
   modalHeader: {
     flexDirection: 'row',

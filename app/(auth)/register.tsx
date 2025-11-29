@@ -51,7 +51,7 @@ export default function RegisterScreen() {
         password,
       });
       // Only navigate if registration and login succeeded
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/dashboard');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       

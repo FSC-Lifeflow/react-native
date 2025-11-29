@@ -364,47 +364,24 @@ export const authService = {
    */
   async getCurrentUser() {
     try {
-      console.log('🔍 Getting current session...');
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-      console.log('📋 Session result:', session ? 'exists' : 'null', 'error:', sessionError);
-
-      if (sessionError) {
-        console.error('❌ Session error:', sessionError);
-        throw new Error(sessionError.message);
-      }
-
-      if (!session?.user) {
-        console.log('❌ No session user found');
+      if (userError || !user) {
         return null;
       }
 
-      console.log('👤 Fetching user record for ID:', session.user.id);
       const { data: userRecord, error: dbError } = await supabase
         .from('users')
         .select('*')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .maybeSingle();
 
-      console.log('📊 User record result:', userRecord ? 'found' : 'null', 'error:', dbError);
-
-      if (dbError) {
-        console.error('❌ Failed to fetch user data:', dbError);
+      if (dbError || !userRecord) {
         return null;
       }
 
-      if (!userRecord) {
-        console.warn('⚠️ Session exists but no user record in database');
-        return null;
-      }
-
-      console.log('✅ getCurrentUser success');
       return userRecord;
     } catch (error) {
-      console.error('❌ getCurrentUser error:', error);
       return null;
     }
   },

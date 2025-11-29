@@ -9,10 +9,12 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFitbit } from '@/hooks/useFitbit';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card } from '@/components/ui/Card';
+import { GoogleCalendar } from '@/components/GoogleCalendar';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -22,6 +24,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
   const { isConnected, isLoading, data, error, refresh } = useFitbit();
 
   const onRefresh = React.useCallback(async () => {
@@ -76,7 +79,7 @@ export default function DashboardScreen() {
       }
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View>
           <Text style={[styles.greeting, { color: colors.foreground }]}>
             {getGreeting()}, {user?.first_name || 'there'}!
@@ -157,6 +160,14 @@ export default function DashboardScreen() {
             color={colors.accent}
           />
         </View>
+      </View>
+
+      {/* Google Calendar */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Calendar</Text>
+        <Card style={styles.calendarCard}>
+          <GoogleCalendar />
+        </Card>
       </View>
 
       {/* Up Next */}
@@ -255,6 +266,9 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.xl,
     fontWeight: Typography.fontWeights.semibold,
     marginBottom: Spacing.md,
+  },
+  calendarCard: {
+    padding: Spacing.md,
   },
   statsGrid: {
     flexDirection: 'row',

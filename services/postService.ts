@@ -54,25 +54,24 @@ export const postService = {
         throw new Error('Failed to get friends');
       }
 
-      if (!friendRequests || friendRequests.length === 0) {
-        return [];
-      }
-
-      // Extract friend IDs
-      const friendIds = friendRequests.map(request => 
+      // Extract friend IDs (or empty array if no friends)
+      const friendIds = friendRequests?.map(request => 
         request.sender_id === currentUser.id ? request.receiver_id : request.sender_id
-      );
+      ) || [];
+
+      // Include current user's ID to show their own posts too
+      const userIdsToShow = [...friendIds, currentUser.id];
 
       // Calculate date 7 days ago
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
       const oneWeekAgoISO = oneWeekAgo.toISOString();
 
-      // Get posts from friends
+      // Get posts from friends AND current user
       const { data: posts, error: postsError } = await supabase
         .from('user_posts')
         .select('*')
-        .in('user_id', friendIds)
+        .in('user_id', userIdsToShow)
         .gte('created_at', oneWeekAgoISO)
         .order('created_at', { ascending: false })
         .limit(limit);

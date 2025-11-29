@@ -11,6 +11,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      initialRouteName="dashboard"
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
@@ -31,12 +32,6 @@ export default function TabLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color }) => <Ionicons name="stats-chart" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null, // Hide from tabs
         }}
       />
       <Tabs.Screen

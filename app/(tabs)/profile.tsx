@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/services/authService';
 import { Card } from '@/components/ui/Card';
@@ -22,6 +23,7 @@ export default function ProfileScreen() {
   const { user, refreshUser } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -89,7 +91,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: colors.background }]} 
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
     >
       {/* Profile Header */}
       <Card style={styles.profileCard}>
