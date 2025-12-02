@@ -11,8 +11,13 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Card } from '@/components/ui/Card';
 
 export default function RegisterScreen() {
   const [username, setUsername] = useState('');
@@ -23,6 +28,9 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+  const insets = useSafeAreaInsets();
 
   const handleRegister = async () => {
     // Validation
@@ -78,23 +86,31 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join LifeFlow today</Text>
+          <View style={[styles.logoContainer, { backgroundColor: colors.tint }]}>
+            <Ionicons name="person-add" size={40} color="#fff" />
+          </View>
+          <Text style={[styles.title, { color: colors.foreground }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>Join LifeFlow and start your wellness journey</Text>
         </View>
 
-        <View style={styles.form}>
+        <Card style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Username</Text>
+            <Text style={[styles.label, { color: colors.foreground }]}>Username</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { 
+                backgroundColor: colors.muted + '30',
+                borderColor: colors.border,
+                color: colors.foreground 
+              }]}
               placeholder="Choose a username"
+              placeholderTextColor={colors.mutedForeground}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -104,10 +120,15 @@ export default function RegisterScreen() {
 
           <View style={styles.row}>
             <View style={[styles.inputContainer, styles.halfWidth]}>
-              <Text style={styles.label}>First Name</Text>
+              <Text style={[styles.label, { color: colors.foreground }]}>First Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { 
+                  backgroundColor: colors.muted + '30',
+                  borderColor: colors.border,
+                  color: colors.foreground 
+                }]}
                 placeholder="First name"
+                placeholderTextColor={colors.mutedForeground}
                 value={firstName}
                 onChangeText={setFirstName}
                 editable={!loading}
@@ -115,10 +136,15 @@ export default function RegisterScreen() {
             </View>
 
             <View style={[styles.inputContainer, styles.halfWidth]}>
-              <Text style={styles.label}>Last Name</Text>
+              <Text style={[styles.label, { color: colors.foreground }]}>Last Name</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { 
+                  backgroundColor: colors.muted + '30',
+                  borderColor: colors.border,
+                  color: colors.foreground 
+                }]}
                 placeholder="Last name"
+                placeholderTextColor={colors.mutedForeground}
                 value={lastName}
                 onChangeText={setLastName}
                 editable={!loading}
@@ -127,10 +153,15 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, { color: colors.foreground }]}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { 
+                backgroundColor: colors.muted + '30',
+                borderColor: colors.border,
+                color: colors.foreground 
+              }]}
               placeholder="Enter your email"
+              placeholderTextColor={colors.mutedForeground}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -140,10 +171,15 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={[styles.label, { color: colors.foreground }]}>Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { 
+                backgroundColor: colors.muted + '30',
+                borderColor: colors.border,
+                color: colors.foreground 
+              }]}
               placeholder="Create a password"
+              placeholderTextColor={colors.mutedForeground}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -152,10 +188,15 @@ export default function RegisterScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirm Password</Text>
+            <Text style={[styles.label, { color: colors.foreground }]}>Confirm Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { 
+                backgroundColor: colors.muted + '30',
+                borderColor: colors.border,
+                color: colors.foreground 
+              }]}
               placeholder="Confirm your password"
+              placeholderTextColor={colors.mutedForeground}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -164,7 +205,7 @@ export default function RegisterScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[styles.button, { backgroundColor: colors.tint }, loading && styles.buttonDisabled]}
             onPress={handleRegister}
             disabled={loading}
           >
@@ -180,11 +221,11 @@ export default function RegisterScreen() {
             onPress={() => router.push('/(auth)/sign-in')}
             disabled={loading}
           >
-            <Text style={styles.linkText}>
-              Already have an account? <Text style={styles.linkTextBold}>Sign In</Text>
+            <Text style={[styles.linkText, { color: colors.mutedForeground }]}>
+              Already have an account? <Text style={[styles.linkTextBold, { color: colors.tint }]}>Sign In</Text>
             </Text>
           </TouchableOpacity>
-        </View>
+        </Card>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -193,78 +234,80 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    padding: Spacing.xl,
   },
   header: {
-    marginBottom: 32,
+    alignItems: 'center',
+    marginBottom: Spacing['2xl'],
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    ...Typography.h1,
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    ...Typography.body,
+    textAlign: 'center',
   },
   form: {
     width: '100%',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    padding: Spacing.xl,
   },
   inputContainer: {
-    marginBottom: 20,
-  },
-  halfWidth: {
-    width: '48%',
+    marginBottom: Spacing.lg,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: Spacing.xs,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: Typography.fontSizes.base,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  halfWidth: {
+    flex: 1,
   },
   button: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: Spacing.sm,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
   },
   linkButton: {
-    marginTop: 24,
+    marginTop: Spacing.xl,
     alignItems: 'center',
   },
   linkText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: Typography.fontSizes.sm,
   },
   linkTextBold: {
-    color: '#007AFF',
-    fontWeight: '600',
+    fontWeight: Typography.fontWeights.semibold,
   },
 });
