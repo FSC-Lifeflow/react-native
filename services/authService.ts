@@ -1,6 +1,5 @@
-import { supabase } from '../lib/supabase';
-import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
+import { supabase } from '../lib/supabase';
 
 // Enable WebBrowser for OAuth flows
 WebBrowser.maybeCompleteAuthSession();
@@ -171,98 +170,12 @@ export const authService = {
   },
 
   /**
-   * Initiates Google OAuth login flow for mobile
+   * Google OAuth login - Not yet implemented
+   * TODO: Implement Google OAuth login flow
+   * For now, users should sign up with email/password and connect Google Calendar separately
    */
   async loginWithGoogle() {
-    try {
-      // Create redirect URL - for web, use the auth callback route
-      const redirectUrl = AuthSession.makeRedirectUri({
-        path: 'auth/callback',
-      });
-
-      console.log('🔍 Redirect URL:', redirectUrl);
-
-      // Start the OAuth flow - Supabase will handle the redirect
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          // Don't skip browser redirect - let Supabase handle it
-          skipBrowserRedirect: false,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-
-      if (error) {
-        console.error('❌ Google OAuth error:', error);
-        throw new Error(error.message);
-      }
-
-      if (data?.url) {
-        console.log('🌐 Opening OAuth URL in browser...');
-        console.log('📝 Note: After signing in, you may need to manually return to the app');
-        
-        // Open the OAuth URL - WebBrowser.maybeCompleteAuthSession() will handle the return
-        const result = await WebBrowser.openAuthSessionAsync(
-          data.url,
-          redirectUrl
-        );
-
-        console.log('📱 Browser result:', JSON.stringify(result, null, 2));
-
-        // Check if we got a successful result with URL
-        if (result.type === 'success' && result.url) {
-          console.log('✅ Got redirect URL:', result.url);
-          
-          // Parse the URL for tokens
-          const url = result.url;
-          let params: URLSearchParams;
-          
-          if (url.includes('#')) {
-            params = new URLSearchParams(url.split('#')[1]);
-          } else if (url.includes('?')) {
-            params = new URLSearchParams(url.split('?')[1]);
-          } else {
-            console.error('❌ No parameters in URL');
-            throw new Error('No authentication parameters found');
-          }
-
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-
-          console.log('🔑 Tokens:', { 
-            hasAccessToken: !!accessToken, 
-            hasRefreshToken: !!refreshToken 
-          });
-
-          if (accessToken && refreshToken) {
-            const { error: sessionError } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-
-            if (sessionError) {
-              console.error('❌ Session error:', sessionError);
-              throw sessionError;
-            }
-
-            console.log('✅ Session set successfully');
-            return await this.handleOAuthCallback();
-          }
-        } else if (result.type === 'cancel') {
-          console.log('⚠️ OAuth cancelled');
-          throw new Error('Sign in was cancelled');
-        }
-      }
-
-      throw new Error('OAuth flow failed');
-    } catch (error) {
-      console.error('❌ Google OAuth failed:', error);
-      throw error;
-    }
+    throw new Error('Google OAuth login is not yet implemented. Please sign up with email and password, then connect your Google Calendar from the dashboard.');
   },
 
   /**

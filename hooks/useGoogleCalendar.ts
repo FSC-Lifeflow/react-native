@@ -112,7 +112,25 @@ export function useGoogleCalendar() {
     };
 
     initializeAuth();
-  }, [user?.id, checkConnectionStatus, fetchEvents]);
+    
+    // Poll for connection status every 3 seconds to catch OAuth completion
+    const interval = setInterval(async () => {
+      if (!user?.id) return;
+      
+      const status = await checkConnectionStatus();
+      const wasAuthenticated = state.isAuthenticated;
+      const isNowAuthenticated = status?.connected && status?.hasRefreshToken;
+      
+      // If authentication status changed from false to true, fetch events
+      if (!wasAuthenticated && isNowAuthenticated) {
+        console.log('🔄 Calendar connected! Fetching events...');
+        setState(prev => ({ ...prev, isAuthenticated: true }));
+        fetchEvents();
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [user?.id, state.isAuthenticated]);
 
   // Sign out / disconnect
   const signOut = useCallback(async () => {

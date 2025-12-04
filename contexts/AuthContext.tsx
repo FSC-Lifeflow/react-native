@@ -34,7 +34,7 @@ type AuthContextType = {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: () => Promise<void | { pending: boolean }>;
   register: (userData: {
     username: string;
     firstName: string;
@@ -166,8 +166,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     setLoading(true);
     setError(null);
     try {
-      const { user } = await authService.loginWithGoogle();
-      setUser(user);
+      const result = await authService.loginWithGoogle();
+      
+      // If pending, OAuth is in progress via browser
+      if (result && 'pending' in result) {
+        return result;
+      }
+      
+      // Otherwise, we have user data
+      if (result && 'user' in result) {
+        setUser(result.user);
+      }
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Google login failed';

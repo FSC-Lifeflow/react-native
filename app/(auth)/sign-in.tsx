@@ -52,9 +52,9 @@ export default function SignInScreen() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      // On web, OAuth redirects to callback route which handles navigation
-      // On mobile, we need to manually navigate after successful auth
-      // The callback route will handle the redirect, so we don't need to do it here
+      // Browser opened, waiting for OAuth callback via deep link
+      console.log('⏳ OAuth browser opened, waiting for callback...');
+      setLoading(false);
     } catch (error) {
       Alert.alert(
         'Google Sign In Failed',
