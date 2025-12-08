@@ -22,6 +22,9 @@ import { Card } from '@/components/ui/Card';
 import { useFriendPosts, useCreatePost, useToggleLike, useDeletePost } from '@/hooks/usePosts';
 import { postService } from '@/services/postService';
 import { useAuth } from '@/contexts/AuthContext';
+import { motivationService } from '@/services/motivationService';
+import { useFriends } from '@/hooks/useFriends';
+import { Friend } from '@/services/friendService';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme();
@@ -38,6 +41,16 @@ export default function FeedScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // Motivation states
+  const [showMotivationMenuModal, setShowMotivationMenuModal] = useState(false);
+  const [showSendMotivationModal, setShowSendMotivationModal] = useState(false);
+  const [selectedMotivationFriends, setSelectedMotivationFriends] = useState<Friend[]>([]);
+  const [motivationMessage, setMotivationMessage] = useState('');
+  const [isSendingMotivation, setIsSendingMotivation] = useState(false);
+  const [isRequestingMotivation, setIsRequestingMotivation] = useState(false);
+  
+  const { friends } = useFriends();
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -83,6 +96,67 @@ export default function FeedScreen() {
         { text: 'Delete', style: 'destructive', onPress: () => deletePost(postId) },
       ]
     );
+  };
+
+  const handleSendMotivation = async () => {
+    if (selectedMotivationFriends.length === 0) {
+      Alert.alert('No Friends Selected', 'Please select at least one friend to motivate.');
+      return;
+    }
+
+    if (!motivationMessage.trim()) {
+      Alert.alert('Empty Message', 'Please write a motivational message.');
+      return;
+    }
+
+    setIsSendingMotivation(true);
+    try {
+      const friendIds = selectedMotivationFriends.map(f => f.id);
+      await motivationService.sendMotivation(friendIds, motivationMessage);
+      
+      const friendNames = selectedMotivationFriends.length === 1
+        ? `${selectedMotivationFriends[0].first_name} ${selectedMotivationFriends[0].last_name}`
+        : `${selectedMotivationFriends.length} friends`;
+      
+      Alert.alert('Motivation Sent!', `Your motivational message was sent to ${friendNames}.`);
+      
+      // Reset modal state
+      setShowSendMotivationModal(false);
+      setSelectedMotivationFriends([]);
+      setMotivationMessage('');
+    } catch (error: any) {
+      console.error('❌ Error sending motivation:', error);
+      Alert.alert('Error', error.message || 'Failed to send motivation. Please try again.');
+    } finally {
+      setIsSendingMotivation(false);
+    }
+  };
+
+  const handleRequestMotivation = async () => {
+    setIsRequestingMotivation(true);
+    try {
+      const friendCount = await motivationService.requestMotivation();
+      Alert.alert(
+        'Request Sent!',
+        `Motivation request sent to ${friendCount} friend${friendCount === 1 ? '' : 's'}.`
+      );
+    } catch (error: any) {
+      console.error('❌ Error requesting motivation:', error);
+      Alert.alert('Error', error.message || 'Failed to request motivation. Please try again.');
+    } finally {
+      setIsRequestingMotivation(false);
+    }
+  };
+
+  const toggleFriendSelection = (friend: Friend) => {
+    setSelectedMotivationFriends(prev => {
+      const isSelected = prev.some(f => f.id === friend.id);
+      if (isSelected) {
+        return prev.filter(f => f.id !== friend.id);
+      } else {
+        return [...prev, friend];
+      }
+    });
   };
 
   const formatTimeAgo = (dateString: string) => {
@@ -170,12 +244,21 @@ export default function FeedScreen() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.card, paddingTop: insets.top + 16 }]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Feed</Text>
-        <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: colors.tint }]}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.motivationButtonRect, { backgroundColor: colors.tint }]}
+            onPress={() => setShowMotivationMenuModal(true)}
+          >
+            <Ionicons name="sparkles" size={18} color="#fff" />
+            <Text style={[styles.motivationButtonText, { color: '#fff' }]}>Motivation</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.createButton, { backgroundColor: colors.tint }]}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Feed Content */}
@@ -269,6 +352,177 @@ export default function FeedScreen() {
                   <Ionicons name="image-outline" size={24} color={colors.tint} />
                   <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
                 </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Motivation Menu Modal */}
+      <Modal
+        visible={showMotivationMenuModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowMotivationMenuModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowMotivationMenuModal(false)}
+          />
+          <View style={styles.motivationMenuContainer}>
+            <View style={[styles.motivationMenuContent, { backgroundColor: colors.card }]}>
+              <View style={styles.motivationMenuHeader}>
+                <Ionicons name="sparkles" size={24} color={colors.tint} />
+                <Text style={[styles.motivationMenuTitle, { color: colors.foreground }]}>Motivation</Text>
+                <TouchableOpacity onPress={() => setShowMotivationMenuModal(false)}>
+                  <Ionicons name="close" size={24} color={colors.foreground} />
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={[styles.motivationMenuSubtitle, { color: colors.foreground, opacity: 0.7 }]}>
+                Choose an option to motivate or get motivated
+              </Text>
+
+              <View style={styles.motivationOptions}>
+                <TouchableOpacity
+                  style={[styles.motivationOptionCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => {
+                    setShowMotivationMenuModal(false);
+                    setShowSendMotivationModal(true);
+                  }}
+                >
+                  <View style={[styles.motivationOptionIcon, { backgroundColor: colors.tint + '20' }]}>
+                    <Ionicons name="send" size={28} color={colors.tint} />
+                  </View>
+                  <Text style={[styles.motivationOptionTitle, { color: colors.foreground }]}>Send Motivation</Text>
+                  <Text style={[styles.motivationOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
+                    Send an encouraging message to your friends
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.motivationOptionCard, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => {
+                    setShowMotivationMenuModal(false);
+                    handleRequestMotivation();
+                  }}
+                  disabled={isRequestingMotivation}
+                >
+                  <View style={[styles.motivationOptionIcon, { backgroundColor: '#ff9500' + '20' }]}>
+                    {isRequestingMotivation ? (
+                      <ActivityIndicator size="small" color="#ff9500" />
+                    ) : (
+                      <Ionicons name="hand-left" size={28} color="#ff9500" />
+                    )}
+                  </View>
+                  <Text style={[styles.motivationOptionTitle, { color: colors.foreground }]}>Request Motivation</Text>
+                  <Text style={[styles.motivationOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
+                    Ask all your friends to motivate you
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Send Motivation Modal */}
+      <Modal
+        visible={showSendMotivationModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSendMotivationModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowSendMotivationModal(false)}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardView}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowSendMotivationModal(false)}>
+                  <Ionicons name="close" size={28} color={colors.foreground} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Send Motivation</Text>
+                <TouchableOpacity
+                  onPress={handleSendMotivation}
+                  disabled={isSendingMotivation || selectedMotivationFriends.length === 0 || !motivationMessage.trim()}
+                >
+                  <Text
+                    style={[
+                      styles.postButton,
+                      { color: colors.tint },
+                      (isSendingMotivation || selectedMotivationFriends.length === 0 || !motivationMessage.trim()) && styles.postButtonDisabled,
+                    ]}
+                  >
+                    {isSendingMotivation ? 'Sending...' : 'Send'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView 
+                style={styles.modalScroll} 
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Select Friends</Text>
+                <View style={styles.friendsList}>
+                  {friends.length === 0 ? (
+                    <Text style={[styles.emptySubtext, { color: colors.foreground, opacity: 0.6 }]}>
+                      No friends yet. Add friends to send motivation!
+                    </Text>
+                  ) : (
+                    friends.map((friend) => {
+                      const isSelected = selectedMotivationFriends.some(f => f.id === friend.id);
+                      return (
+                        <TouchableOpacity
+                          key={friend.id}
+                          style={[
+                            styles.friendItem,
+                            { borderColor: colors.border },
+                            isSelected && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                          ]}
+                          onPress={() => toggleFriendSelection(friend)}
+                        >
+                          {friend.avatar_url ? (
+                            <Image source={{ uri: friend.avatar_url }} style={styles.friendAvatar} />
+                          ) : (
+                            <View style={[styles.friendAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                              <Ionicons name="person" size={16} color={colors.foreground} />
+                            </View>
+                          )}
+                          <Text style={[styles.friendName, { color: colors.foreground }]}>
+                            {friend.first_name} {friend.last_name}
+                          </Text>
+                          {isSelected && (
+                            <Ionicons name="checkmark-circle" size={20} color={colors.tint} style={styles.checkmark} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </View>
+
+                <Text style={[styles.sectionLabel, { color: colors.foreground, marginTop: Spacing.md }]}>
+                  Your Message
+                </Text>
+                <TextInput
+                  style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
+                  placeholder="Write an encouraging message..."
+                  placeholderTextColor={colors.foreground + '80'}
+                  value={motivationMessage}
+                  onChangeText={setMotivationMessage}
+                  multiline
+                  maxLength={300}
+                  autoFocus={false}
+                />
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
@@ -462,5 +716,113 @@ const styles = StyleSheet.create({
   imagePickerText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  motivationButtonRect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  motivationButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  motivationMenuContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+  motivationMenuContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  motivationMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
+  },
+  motivationMenuTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    flex: 1,
+    marginLeft: Spacing.sm,
+  },
+  motivationMenuSubtitle: {
+    fontSize: 14,
+    marginBottom: Spacing.lg,
+    textAlign: 'center',
+  },
+  motivationOptions: {
+    gap: Spacing.md,
+  },
+  motivationOptionCard: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  motivationOptionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  motivationOptionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: Spacing.xs,
+  },
+  motivationOptionDesc: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: Spacing.sm,
+  },
+  friendsList: {
+    gap: Spacing.xs,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.xs,
+  },
+  friendAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: Spacing.sm,
+  },
+  friendName: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  checkmark: {
+    marginLeft: 'auto',
   },
 });
