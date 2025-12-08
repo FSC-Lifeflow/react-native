@@ -26,6 +26,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { router } from 'expo-router';
+import { googleCalendarService, CalendarEvent } from '@/services/googleCalendarService';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
+import { useFriends } from '@/hooks/useFriends';
+import { Friend } from '@/services/friendService';
+import { Image } from 'react-native';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -42,6 +47,30 @@ export default function DashboardScreen() {
   const [motivationResponseText, setMotivationResponseText] = useState('');
   const [respondingToUser, setRespondingToUser] = useState<{ id: string; name: string } | null>(null);
   const [isSendingResponse, setIsSendingResponse] = useState(false);
+  const [expandedNotifications, setExpandedNotifications] = useState<Set<string>>(new Set());
+
+  // Scheduled workout invitation states
+  const [showScheduledWorkoutModal, setShowScheduledWorkoutModal] = useState(false);
+  const [scheduledWorkoutStep, setScheduledWorkoutStep] = useState(1);
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEvent | null>(null);
+  const [selectedWorkoutFriends, setSelectedWorkoutFriends] = useState<Friend[]>([]);
+  const [isLoadingCalendarEvents, setIsLoadingCalendarEvents] = useState(false);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [isSendingInvitations, setIsSendingInvitations] = useState(false);
+  
+  // Challenge workout states
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [challengeStep, setChallengeStep] = useState(1);
+  const [challengeTimeOption, setChallengeTimeOption] = useState<'set' | 'flexible'>('set');
+  const [challengeWorkoutForm, setChallengeWorkoutForm] = useState('');
+  const [challengeDateTime, setChallengeDateTime] = useState('');
+  const [challengeDuration, setChallengeDuration] = useState('');
+  const [challengeNote, setChallengeNote] = useState('');
+  const [selectedChallengeFriends, setSelectedChallengeFriends] = useState<Friend[]>([]);
+  const [isSendingChallenges, setIsSendingChallenges] = useState(false);
+  
+  const { friends } = useFriends();
+  const { isAuthenticated: isCalendarConnected } = useGoogleCalendar();
 
   const onRefresh = React.useCallback(async () => {
     await refresh();
@@ -104,6 +133,215 @@ export default function DashboardScreen() {
       Alert.alert('Error', 'Failed to send motivation. Please try again.');
     } finally {
       setIsSendingResponse(false);
+    }
+  };
+
+  const handleRemoveNotification = async (notificationId: string) => {
+    try {
+      await notificationService.deleteNotification(notificationId);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      await refreshUnreadCount();
+    } catch (error) {
+      console.error('Failed to remove notification:', error);
+      Alert.alert('Error', 'Failed to remove notification. Please try again.');
+    }
+  };
+
+  const toggleNotificationExpanded = (notificationId: string) => {
+    setExpandedNotifications(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(notificationId)) {
+        newSet.delete(notificationId);
+      } else {
+        newSet.add(notificationId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleOpenScheduledWorkoutModal = async () => {
+    if (!isCalendarConnected) {
+      Alert.alert(
+        'Google Calendar Not Connected',
+        'Please connect your Google Calendar to invite friends to scheduled workouts.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setShowScheduledWorkoutModal(true);
+    setIsLoadingCalendarEvents(true);
+    
+    try {
+      if (!user?.id) throw new Error('Not authenticated');
+      
+      const { events } = await googleCalendarService.fetchEvents(user.id);
+      
+      // Filter for workout-related events
+      const workoutEvents = events.filter((event: CalendarEvent) => {
+        const summary = event.summary?.toLowerCase() || '';
+        return summary.includes('workout') || 
+               summary.includes('gym') || 
+               summary.includes('exercise') || 
+               summary.includes('training') ||
+               summary.includes('fitness') ||
+               summary.includes('yoga') ||
+               summary.includes('run') ||
+               summary.includes('cycling') ||
+               summary.includes('swimming');
+      });
+      
+      setCalendarEvents(workoutEvents);
+    } catch (error: any) {
+      console.error('Error loading calendar events:', error);
+      Alert.alert('Error', 'Failed to load calendar events. Please try again.');
+      setShowScheduledWorkoutModal(false);
+    } finally {
+      setIsLoadingCalendarEvents(false);
+    }
+  };
+
+  const toggleWorkoutFriendSelection = (friend: Friend) => {
+    setSelectedWorkoutFriends(prev => {
+      const isSelected = prev.some(f => f.id === friend.id);
+      if (isSelected) {
+        return prev.filter(f => f.id !== friend.id);
+      } else {
+        return [...prev, friend];
+      }
+    });
+  };
+
+  const handleSendWorkoutInvitations = async () => {
+    if (selectedWorkoutFriends.length === 0) {
+      Alert.alert('No Friends Selected', 'Please select at least one friend to invite.');
+      return;
+    }
+
+    if (!selectedCalendarEvent) {
+      Alert.alert('No Event Selected', 'Please select a workout event.');
+      return;
+    }
+
+    setIsSendingInvitations(true);
+    try {
+      if (!user?.id) throw new Error('Not authenticated');
+
+      const notificationPromises = selectedWorkoutFriends.map(friend =>
+        notificationService.createNotification({
+          user_id: friend.id,
+          type: 'scheduled_workout_invitation',
+          title: 'Scheduled Workout Invitation',
+          message: `${user.first_name || 'Someone'} ${user.last_name || ''} invited you to join their workout: ${selectedCalendarEvent.summary}`,
+          data: {
+            inviter_id: user.id,
+            inviter_name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+            event_id: selectedCalendarEvent.id,
+            event_summary: selectedCalendarEvent.summary,
+            event_start: selectedCalendarEvent.start.dateTime || selectedCalendarEvent.start.date,
+            event_end: selectedCalendarEvent.end.dateTime || selectedCalendarEvent.end.date,
+            event_location: selectedCalendarEvent.location,
+            event_description: selectedCalendarEvent.description,
+          },
+          read: false,
+        })
+      );
+      
+      await Promise.all(notificationPromises);
+      
+      const friendNames = selectedWorkoutFriends.length === 1
+        ? `${selectedWorkoutFriends[0].first_name} ${selectedWorkoutFriends[0].last_name}`
+        : `${selectedWorkoutFriends.length} friends`;
+      
+      Alert.alert('Invitations Sent!', `Successfully invited ${friendNames} to your workout.`);
+      
+      setShowScheduledWorkoutModal(false);
+      setScheduledWorkoutStep(1);
+      setSelectedCalendarEvent(null);
+      setSelectedWorkoutFriends([]);
+      setCalendarEvents([]);
+    } catch (error: any) {
+      console.error('❌ Error sending invitations:', error);
+      Alert.alert('Error', error.message || 'Failed to send invitations. Please try again.');
+    } finally {
+      setIsSendingInvitations(false);
+    }
+  };
+
+  const toggleChallengeFriendSelection = (friend: Friend) => {
+    setSelectedChallengeFriends(prev => {
+      const isSelected = prev.some(f => f.id === friend.id);
+      if (isSelected) {
+        return prev.filter(f => f.id !== friend.id);
+      } else {
+        return [...prev, friend];
+      }
+    });
+  };
+
+  const handleSendChallenges = async () => {
+    if (selectedChallengeFriends.length === 0) {
+      Alert.alert('No Friends Selected', 'Please select at least one friend to challenge.');
+      return;
+    }
+
+    if (!challengeWorkoutForm) {
+      Alert.alert('No Workout Selected', 'Please select a workout form.');
+      return;
+    }
+
+    if (challengeTimeOption === 'set' && (!challengeDateTime || !challengeDuration)) {
+      Alert.alert('Incomplete Details', 'Please set date/time and duration for the challenge.');
+      return;
+    }
+
+    setIsSendingChallenges(true);
+    try {
+      if (!user?.id) throw new Error('Not authenticated');
+
+      const notificationPromises = selectedChallengeFriends.map(friend =>
+        notificationService.createNotification({
+          user_id: friend.id,
+          type: 'workout_challenge',
+          title: 'Workout Challenge',
+          message: challengeTimeOption === 'set'
+            ? `${user.first_name || 'Someone'} ${user.last_name || ''} challenged you to a ${challengeWorkoutForm} workout!`
+            : `${user.first_name || 'Someone'} ${user.last_name || ''} challenged you to a ${challengeWorkoutForm} workout - complete it on your own time!`,
+          data: {
+            challenger_id: user.id,
+            challenger_name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+            challenge_type: 'workout_challenge',
+            workout_form: challengeWorkoutForm,
+            time_option: challengeTimeOption,
+            workout_time: challengeTimeOption === 'set' ? challengeDateTime : null,
+            workout_duration: challengeTimeOption === 'set' ? challengeDuration : null,
+            workout_note: challengeNote || null,
+          },
+          read: false,
+        })
+      );
+      
+      await Promise.all(notificationPromises);
+      
+      const friendNames = selectedChallengeFriends.length === 1
+        ? `${selectedChallengeFriends[0].first_name} ${selectedChallengeFriends[0].last_name}`
+        : `${selectedChallengeFriends.length} friends`;
+      
+      Alert.alert('Challenges Sent!', `Workout challenge sent to ${friendNames}.`);
+      
+      setShowChallengeModal(false);
+      setChallengeStep(1);
+      setChallengeTimeOption('set');
+      setChallengeWorkoutForm('');
+      setChallengeDateTime('');
+      setChallengeDuration('');
+      setChallengeNote('');
+      setSelectedChallengeFriends([]);
+    } catch (error: any) {
+      console.error('❌ Error sending challenges:', error);
+      Alert.alert('Error', error.message || 'Failed to send challenges. Please try again.');
+    } finally {
+      setIsSendingChallenges(false);
     }
   };
 
@@ -280,7 +518,10 @@ export default function DashboardScreen() {
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Actions</Text>
         
         <View style={styles.quickActions}>
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.card }]}>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/(tabs)/feed')}
+          >
             <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
             <Text style={[styles.actionText, { color: colors.foreground }]}>Log Activity</Text>
           </TouchableOpacity>
@@ -290,9 +531,30 @@ export default function DashboardScreen() {
             <Text style={[styles.actionText, { color: colors.foreground }]}>Sync Data</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.card }]}>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/(tabs)/feed')}
+          >
             <Ionicons name="calendar-outline" size={24} color={colors.primary} />
             <Text style={[styles.actionText, { color: colors.foreground }]}>Schedule</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.quickActions, { marginTop: Spacing.md }]}>
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: colors.card }]}
+            onPress={handleOpenScheduledWorkoutModal}
+          >
+            <Ionicons name="calendar" size={24} color="#34c759" />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>Invite to Workout</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, { backgroundColor: colors.card }]}
+            onPress={() => setShowChallengeModal(true)}
+          >
+            <Ionicons name="flash" size={24} color="#ff3b30" />
+            <Text style={[styles.actionText, { color: colors.foreground }]}>Challenge Friend</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -347,81 +609,224 @@ export default function DashboardScreen() {
               <FlatList
                 data={notifications}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.notificationItem,
-                      { backgroundColor: item.read ? 'transparent' : colors.tint + '10', borderBottomColor: colors.border }
-                    ]}
-                    onPress={async () => {
-                      if (!item.read) {
-                        try {
-                          await notificationService.markAsRead(item.id);
-                          const updatedNotifs = notifications.map(n =>
-                            n.id === item.id ? { ...n, read: true } : n
-                          );
-                          setNotifications(updatedNotifs);
-                          await refreshUnreadCount();
-                        } catch (error) {
-                          console.error('Failed to mark as read:', error);
-                        }
-                      }
-                      
-                      // Handle motivation notifications
-                      if (item.type === 'motivation_received' && item.data?.motivation_message) {
-                        Alert.alert(
-                          `Motivation from ${item.data.sender_name}`,
-                          item.data.motivation_message,
-                          [{ text: 'OK' }]
-                        );
-                      } else if (item.type === 'motivation_request' && item.data?.requester_id) {
-                        // Show alert with option to send motivation back
-                        Alert.alert(
-                          'Motivation Request',
-                          `${item.data.requester_name} is requesting motivation. Would you like to send them an encouraging message?`,
-                          [
-                            { text: 'Later', style: 'cancel' },
-                            {
-                              text: 'Send Motivation',
-                              onPress: () => {
-                                setShowNotificationsModal(false);
-                                setRespondingToUser({ id: item.data.requester_id, name: item.data.requester_name });
-                                setShowMotivationResponseModal(true);
-                              }
+                renderItem={({ item }) => {
+                  const isExpanded = expandedNotifications.has(item.id);
+                  const isActionableType = ['scheduled_workout_invitation', 'workout_challenge'].includes(item.type);
+                  
+                  return (
+                    <View
+                      style={[
+                        styles.notificationItemContainer,
+                        { backgroundColor: item.read ? 'transparent' : colors.tint + '10', borderBottomColor: colors.border }
+                      ]}
+                    >
+                      <TouchableOpacity
+                        style={styles.notificationItem}
+                        onPress={async () => {
+                          if (!item.read) {
+                            try {
+                              await notificationService.markAsRead(item.id);
+                              const updatedNotifs = notifications.map(n =>
+                                n.id === item.id ? { ...n, read: true } : n
+                              );
+                              setNotifications(updatedNotifs);
+                              await refreshUnreadCount();
+                            } catch (error) {
+                              console.error('Failed to mark as read:', error);
                             }
-                          ]
-                        );
-                      }
-                    }}
-                  >
-                    <View style={styles.notificationIcon}>
-                      {item.type === 'motivation_received' && (
-                        <Ionicons name="sparkles" size={24} color={colors.tint} />
+                          }
+                          
+                          // Handle motivation notifications
+                          if (item.type === 'motivation_received' && item.data?.motivation_message) {
+                            Alert.alert(
+                              `Motivation from ${item.data.sender_name}`,
+                              item.data.motivation_message,
+                              [{ text: 'OK' }]
+                            );
+                          } else if (item.type === 'motivation_request' && item.data?.requester_id) {
+                            Alert.alert(
+                              'Motivation Request',
+                              `${item.data.requester_name} is requesting motivation. Would you like to send them an encouraging message?`,
+                              [
+                                { text: 'Later', style: 'cancel' },
+                                {
+                                  text: 'Send Motivation',
+                                  onPress: () => {
+                                    setShowNotificationsModal(false);
+                                    setRespondingToUser({ id: item.data.requester_id, name: item.data.requester_name });
+                                    setShowMotivationResponseModal(true);
+                                  }
+                                }
+                              ]
+                            );
+                          }
+                        }}
+                      >
+                        <View style={styles.notificationIcon}>
+                          {item.type === 'motivation_received' && <Ionicons name="sparkles" size={24} color={colors.tint} />}
+                          {item.type === 'motivation_request' && <Ionicons name="hand-left" size={24} color="#ff9500" />}
+                          {item.type === 'friend_request' && <Ionicons name="person-add" size={24} color={colors.tint} />}
+                          {item.type === 'scheduled_workout_invitation' && <Ionicons name="calendar" size={24} color="#34c759" />}
+                          {item.type === 'workout_challenge' && <Ionicons name="flash" size={24} color="#ff3b30" />}
+                          {!['motivation_received', 'motivation_request', 'friend_request', 'scheduled_workout_invitation', 'workout_challenge'].includes(item.type) && (
+                            <Ionicons name="notifications" size={24} color={colors.tint} />
+                          )}
+                        </View>
+                        <View style={styles.notificationContent}>
+                          <Text style={[styles.notificationTitle, { color: colors.foreground }]}>{item.title}</Text>
+                          <Text style={[styles.notificationMessage, { color: colors.foreground, opacity: 0.7 }]}>
+                            {item.message}
+                          </Text>
+                          <Text style={[styles.notificationTime, { color: colors.foreground, opacity: 0.5 }]}>
+                            {new Date(item.created_at).toLocaleDateString()} at {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                        </View>
+                        {!item.read && (
+                          <View style={[styles.unreadDot, { backgroundColor: colors.tint }]} />
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Scheduled Workout Invitation Details */}
+                      {item.type === 'scheduled_workout_invitation' && (
+                        <View style={styles.notificationActions}>
+                          <TouchableOpacity
+                            style={[styles.detailsButton, { borderColor: colors.border }]}
+                            onPress={() => toggleNotificationExpanded(item.id)}
+                          >
+                            <Text style={[styles.detailsButtonText, { color: colors.foreground }]}>
+                              {isExpanded ? 'Hide Details' : 'View Details'}
+                            </Text>
+                            <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.foreground} />
+                          </TouchableOpacity>
+                          
+                          {isExpanded && item.data && (
+                            <View style={[styles.expandedDetails, { backgroundColor: colors.background }]}>
+                              {item.data.event_summary && (
+                                <View style={styles.detailRow}>
+                                  <Ionicons name="document-text-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                  <Text style={[styles.detailLabel, { color: colors.foreground }]}>Event:</Text>
+                                  <Text style={[styles.detailValue, { color: colors.foreground }]}>{item.data.event_summary}</Text>
+                                </View>
+                              )}
+                              {item.data.event_start && (
+                                <View style={styles.detailRow}>
+                                  <Ionicons name="calendar-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                  <Text style={[styles.detailLabel, { color: colors.foreground }]}>Start:</Text>
+                                  <Text style={[styles.detailValue, { color: colors.foreground }]}>
+                                    {new Date(item.data.event_start).toLocaleString()}
+                                  </Text>
+                                </View>
+                              )}
+                              {item.data.event_location && (
+                                <View style={styles.detailRow}>
+                                  <Ionicons name="location-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                  <Text style={[styles.detailLabel, { color: colors.foreground }]}>Location:</Text>
+                                  <Text style={[styles.detailValue, { color: colors.foreground }]}>{item.data.event_location}</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+
+                          <View style={styles.actionButtons}>
+                            <TouchableOpacity
+                              style={[styles.acceptButton, { backgroundColor: '#34c759' }]}
+                              onPress={async () => {
+                                Alert.alert('Invitation Accepted', "You've accepted the workout invitation!");
+                                await handleRemoveNotification(item.id);
+                              }}
+                            >
+                              <Ionicons name="checkmark" size={16} color="#fff" />
+                              <Text style={styles.actionButtonText}>Accept</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.declineButton, { borderColor: colors.border }]}
+                              onPress={() => handleRemoveNotification(item.id)}
+                            >
+                              <Ionicons name="close" size={16} color={colors.foreground} />
+                              <Text style={[styles.actionButtonText, { color: colors.foreground }]}>Decline</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
                       )}
-                      {item.type === 'motivation_request' && (
-                        <Ionicons name="hand-left" size={24} color="#ff9500" />
-                      )}
-                      {item.type === 'friend_request' && (
-                        <Ionicons name="person-add" size={24} color={colors.tint} />
-                      )}
-                      {!['motivation_received', 'motivation_request', 'friend_request'].includes(item.type) && (
-                        <Ionicons name="notifications" size={24} color={colors.tint} />
+
+                      {/* Workout Challenge Details */}
+                      {item.type === 'workout_challenge' && (
+                        <View style={styles.notificationActions}>
+                          <TouchableOpacity
+                            style={[styles.detailsButton, { borderColor: colors.border }]}
+                            onPress={() => toggleNotificationExpanded(item.id)}
+                          >
+                            <Text style={[styles.detailsButtonText, { color: colors.foreground }]}>
+                              {isExpanded ? 'Hide Details' : 'View Challenge'}
+                            </Text>
+                            <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={colors.foreground} />
+                          </TouchableOpacity>
+                          
+                          {isExpanded && item.data && (
+                            <View style={[styles.expandedDetails, { backgroundColor: colors.background }]}>
+                              <View style={styles.detailRow}>
+                                <Ionicons name="barbell-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                <Text style={[styles.detailLabel, { color: colors.foreground }]}>Type:</Text>
+                                <Text style={[styles.detailValue, { color: colors.foreground, textTransform: 'capitalize' }]}>
+                                  {item.data.workout_form}
+                                </Text>
+                              </View>
+                              {item.data.time_option === 'set' && item.data.workout_time ? (
+                                <>
+                                  <View style={styles.detailRow}>
+                                    <Ionicons name="calendar-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                    <Text style={[styles.detailLabel, { color: colors.foreground }]}>When:</Text>
+                                    <Text style={[styles.detailValue, { color: colors.foreground }]}>
+                                      {new Date(item.data.workout_time).toLocaleString()}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.detailRow}>
+                                    <Ionicons name="time-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                    <Text style={[styles.detailLabel, { color: colors.foreground }]}>Duration:</Text>
+                                    <Text style={[styles.detailValue, { color: colors.foreground }]}>{item.data.workout_duration} min</Text>
+                                  </View>
+                                </>
+                              ) : (
+                                <View style={styles.detailRow}>
+                                  <Ionicons name="time-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                  <Text style={[styles.detailLabel, { color: colors.foreground }]}>Timing:</Text>
+                                  <Text style={[styles.detailValue, { color: '#ff3b30' }]}>Complete on your own time</Text>
+                                </View>
+                              )}
+                              {item.data.workout_note && (
+                                <View style={styles.detailRow}>
+                                  <Ionicons name="document-text-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                  <Text style={[styles.detailLabel, { color: colors.foreground }]}>Note:</Text>
+                                  <Text style={[styles.detailValue, { color: colors.foreground }]}>{item.data.workout_note}</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+
+                          <View style={styles.actionButtons}>
+                            <TouchableOpacity
+                              style={[styles.acceptButton, { backgroundColor: '#ff3b30' }]}
+                              onPress={async () => {
+                                Alert.alert('Challenge Accepted', "You've accepted the workout challenge!");
+                                await handleRemoveNotification(item.id);
+                              }}
+                            >
+                              <Ionicons name="flash" size={16} color="#fff" />
+                              <Text style={styles.actionButtonText}>Accept</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.declineButton, { borderColor: colors.border }]}
+                              onPress={() => handleRemoveNotification(item.id)}
+                            >
+                              <Ionicons name="close" size={16} color={colors.foreground} />
+                              <Text style={[styles.actionButtonText, { color: colors.foreground }]}>Decline</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
                       )}
                     </View>
-                    <View style={styles.notificationContent}>
-                      <Text style={[styles.notificationTitle, { color: colors.foreground }]}>{item.title}</Text>
-                      <Text style={[styles.notificationMessage, { color: colors.foreground, opacity: 0.7 }]}>
-                        {item.message}
-                      </Text>
-                      <Text style={[styles.notificationTime, { color: colors.foreground, opacity: 0.5 }]}>
-                        {new Date(item.created_at).toLocaleDateString()} at {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                    {!item.read && (
-                      <View style={[styles.unreadDot, { backgroundColor: colors.tint }]} />
-                    )}
-                  </TouchableOpacity>
-                )}
+                  );
+                }}
               />
             )}
           </View>
@@ -498,6 +903,497 @@ export default function DashboardScreen() {
                 )}
               </TouchableOpacity>
             </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Scheduled Workout Invitation Modal - Same as feed.tsx */}
+      <Modal
+        visible={showScheduledWorkoutModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowScheduledWorkoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowScheduledWorkoutModal(false)}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowScheduledWorkoutModal(false)}>
+                  <Ionicons name="close" size={28} color={colors.foreground} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  {scheduledWorkoutStep === 1 ? 'Select Workout' : 'Select Friends'}
+                </Text>
+                <View style={{ width: 28 }} />
+              </View>
+
+              <View style={styles.stepIndicator}>
+                <View style={[styles.stepCircle, scheduledWorkoutStep === 1 && { backgroundColor: colors.tint }]}>
+                  <Text style={[styles.stepText, { color: scheduledWorkoutStep === 1 ? '#fff' : colors.foreground }]}>1</Text>
+                </View>
+                <View style={[styles.stepLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.stepCircle, scheduledWorkoutStep === 2 && { backgroundColor: colors.tint }]}>
+                  <Text style={[styles.stepText, { color: scheduledWorkoutStep === 2 ? '#fff' : colors.foreground }]}>2</Text>
+                </View>
+              </View>
+
+              <ScrollView 
+                style={styles.modalScroll} 
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {scheduledWorkoutStep === 1 ? (
+                  <>
+                    {isLoadingCalendarEvents ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={colors.tint} />
+                        <Text style={[styles.loadingText, { color: colors.foreground }]}>
+                          Loading your calendar events...
+                        </Text>
+                      </View>
+                    ) : calendarEvents.length > 0 ? (
+                      <>
+                        <Text style={[styles.sectionLabel, { color: colors.foreground }]}>
+                          Select a Workout Event
+                        </Text>
+                        <View style={styles.eventsList}>
+                          {calendarEvents.map((event) => {
+                            const isSelected = selectedCalendarEvent?.id === event.id;
+                            const startDate = event.start.dateTime 
+                              ? new Date(event.start.dateTime) 
+                              : event.start.date 
+                              ? new Date(event.start.date) 
+                              : null;
+
+                            return (
+                              <TouchableOpacity
+                                key={event.id}
+                                style={[
+                                  styles.eventItem,
+                                  { borderColor: colors.border },
+                                  isSelected && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                                ]}
+                                onPress={() => setSelectedCalendarEvent(event)}
+                              >
+                                <View style={styles.eventContent}>
+                                  <Text style={[styles.eventTitle, { color: colors.foreground }]}>
+                                    {event.summary}
+                                  </Text>
+                                  {event.description && (
+                                    <Text 
+                                      style={[styles.eventDescription, { color: colors.foreground, opacity: 0.6 }]}
+                                      numberOfLines={2}
+                                    >
+                                      {event.description}
+                                    </Text>
+                                  )}
+                                  <View style={styles.eventDetails}>
+                                    {startDate && (
+                                      <View style={styles.eventDetailItem}>
+                                        <Ionicons name="calendar-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                        <Text style={[styles.eventDetailText, { color: colors.foreground, opacity: 0.6 }]}>
+                                          {startDate.toLocaleDateString('en-US', { 
+                                            month: 'short', 
+                                            day: 'numeric',
+                                            hour: event.start.dateTime ? 'numeric' : undefined,
+                                            minute: event.start.dateTime ? '2-digit' : undefined
+                                          })}
+                                        </Text>
+                                      </View>
+                                    )}
+                                    {event.location && (
+                                      <View style={styles.eventDetailItem}>
+                                        <Ionicons name="location-outline" size={14} color={colors.foreground} style={{ opacity: 0.6 }} />
+                                        <Text 
+                                          style={[styles.eventDetailText, { color: colors.foreground, opacity: 0.6 }]}
+                                          numberOfLines={1}
+                                        >
+                                          {event.location}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                                {isSelected && (
+                                  <Ionicons name="checkmark-circle" size={24} color={colors.tint} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.emptyState}>
+                        <Ionicons name="calendar-outline" size={64} color={colors.foreground} style={{ opacity: 0.3 }} />
+                        <Text style={[styles.emptyText, { color: colors.foreground }]}>
+                          No upcoming workout events
+                        </Text>
+                        <Text style={[styles.emptySubtext, { color: colors.foreground, opacity: 0.6 }]}>
+                          Create workout events in your Google Calendar to invite friends
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Select Friends</Text>
+                    <View style={styles.friendsList}>
+                      {friends.length === 0 ? (
+                        <Text style={[styles.emptySubtext, { color: colors.foreground, opacity: 0.6 }]}>
+                          No friends yet. Add friends to invite them!
+                        </Text>
+                      ) : (
+                        friends.map((friend) => {
+                          const isSelected = selectedWorkoutFriends.some(f => f.id === friend.id);
+                          return (
+                            <TouchableOpacity
+                              key={friend.id}
+                              style={[
+                                styles.friendItem,
+                                { borderColor: colors.border },
+                                isSelected && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                              ]}
+                              onPress={() => toggleWorkoutFriendSelection(friend)}
+                            >
+                              {friend.avatar_url ? (
+                                <Image source={{ uri: friend.avatar_url }} style={styles.friendAvatar} />
+                              ) : (
+                                <View style={[styles.friendAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                                  <Ionicons name="person" size={16} color={colors.foreground} />
+                                </View>
+                              )}
+                              <Text style={[styles.friendName, { color: colors.foreground }]}>
+                                {friend.first_name} {friend.last_name}
+                              </Text>
+                              {isSelected && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.tint} style={styles.checkmark} />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </View>
+                  </>
+                )}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                {scheduledWorkoutStep === 1 ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.fullWidthButton,
+                      { backgroundColor: colors.tint },
+                      !selectedCalendarEvent && styles.buttonDisabled
+                    ]}
+                    onPress={() => setScheduledWorkoutStep(2)}
+                    disabled={!selectedCalendarEvent}
+                  >
+                    <Text style={styles.fullWidthButtonText}>Next: Select Friends</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.halfButton, { backgroundColor: colors.background, borderColor: colors.border }]}
+                      onPress={() => setScheduledWorkoutStep(1)}
+                    >
+                      <Text style={[styles.halfButtonText, { color: colors.foreground }]}>Back</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.halfButton,
+                        { backgroundColor: colors.tint },
+                        (selectedWorkoutFriends.length === 0 || isSendingInvitations) && styles.buttonDisabled
+                      ]}
+                      onPress={handleSendWorkoutInvitations}
+                      disabled={selectedWorkoutFriends.length === 0 || isSendingInvitations}
+                    >
+                      {isSendingInvitations ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
+                          <Text style={styles.fullWidthButtonText}>Send Invitations</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Challenge Workout Modal - Simplified version for dashboard */}
+      <Modal
+        visible={showChallengeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowChallengeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowChallengeModal(false)}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowChallengeModal(false)}>
+                  <Ionicons name="close" size={28} color={colors.foreground} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  {challengeStep === 1 ? 'Challenge Details' : 'Select Friends'}
+                </Text>
+                <View style={{ width: 28 }} />
+              </View>
+
+              <View style={styles.stepIndicator}>
+                <View style={[styles.stepCircle, challengeStep === 1 && { backgroundColor: colors.tint }]}>
+                  <Text style={[styles.stepText, { color: challengeStep === 1 ? '#fff' : colors.foreground }]}>1</Text>
+                </View>
+                <View style={[styles.stepLine, { backgroundColor: colors.border }]} />
+                <View style={[styles.stepCircle, challengeStep === 2 && { backgroundColor: colors.tint }]}>
+                  <Text style={[styles.stepText, { color: challengeStep === 2 ? '#fff' : colors.foreground }]}>2</Text>
+                </View>
+              </View>
+
+              <ScrollView 
+                style={styles.modalScroll} 
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {challengeStep === 1 ? (
+                  <>
+                    <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Challenge Time</Text>
+                    <View style={styles.timeOptionContainer}>
+                      <TouchableOpacity
+                        style={[
+                          styles.timeOptionButton,
+                          { borderColor: colors.border },
+                          challengeTimeOption === 'set' && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                        ]}
+                        onPress={() => setChallengeTimeOption('set')}
+                      >
+                        <Ionicons 
+                          name="calendar" 
+                          size={24} 
+                          color={challengeTimeOption === 'set' ? colors.tint : colors.foreground} 
+                        />
+                        <Text style={[styles.timeOptionText, { color: colors.foreground }]}>Set Time</Text>
+                        <Text style={[styles.timeOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
+                          Specific date & time
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.timeOptionButton,
+                          { borderColor: colors.border },
+                          challengeTimeOption === 'flexible' && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                        ]}
+                        onPress={() => setChallengeTimeOption('flexible')}
+                      >
+                        <Ionicons 
+                          name="time" 
+                          size={24} 
+                          color={challengeTimeOption === 'flexible' ? colors.tint : colors.foreground} 
+                        />
+                        <Text style={[styles.timeOptionText, { color: colors.foreground }]}>Flexible</Text>
+                        <Text style={[styles.timeOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
+                          Friend chooses when
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {challengeTimeOption === 'set' && (
+                      <>
+                        <Text style={[styles.sectionLabel, { color: colors.foreground, marginTop: Spacing.md }]}>
+                          Date & Time
+                        </Text>
+                        <TextInput
+                          style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
+                          placeholder="e.g., Dec 10, 2025 at 6:00 PM"
+                          placeholderTextColor={colors.foreground + '80'}
+                          value={challengeDateTime}
+                          onChangeText={setChallengeDateTime}
+                        />
+
+                        <Text style={[styles.sectionLabel, { color: colors.foreground, marginTop: Spacing.md }]}>
+                          Duration
+                        </Text>
+                        <View style={styles.durationContainer}>
+                          {['15', '30', '45', '60', '90', '120'].map((duration) => (
+                            <TouchableOpacity
+                              key={duration}
+                              style={[
+                                styles.durationButton,
+                                { borderColor: colors.border },
+                                challengeDuration === duration && { backgroundColor: colors.tint, borderColor: colors.tint }
+                              ]}
+                              onPress={() => setChallengeDuration(duration)}
+                            >
+                              <Text style={[
+                                styles.durationText,
+                                { color: challengeDuration === duration ? '#fff' : colors.foreground }
+                              ]}>
+                                {parseInt(duration) >= 60 ? `${parseInt(duration) / 60}h` : `${duration}m`}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </>
+                    )}
+
+                    <Text style={[styles.sectionLabel, { color: colors.foreground, marginTop: Spacing.md }]}>
+                      Workout Type
+                    </Text>
+                    <View style={styles.workoutFormGrid}>
+                      {[
+                        { value: 'strength', label: 'Strength', icon: 'barbell' },
+                        { value: 'cardio', label: 'Cardio', icon: 'heart' },
+                        { value: 'yoga', label: 'Yoga', icon: 'body' },
+                        { value: 'hiit', label: 'HIIT', icon: 'flash' },
+                        { value: 'running', label: 'Running', icon: 'walk' },
+                        { value: 'cycling', label: 'Cycling', icon: 'bicycle' },
+                      ].map((workout) => (
+                        <TouchableOpacity
+                          key={workout.value}
+                          style={[
+                            styles.workoutFormButton,
+                            { borderColor: colors.border },
+                            challengeWorkoutForm === workout.value && { 
+                              backgroundColor: colors.tint + '20', 
+                              borderColor: colors.tint 
+                            }
+                          ]}
+                          onPress={() => setChallengeWorkoutForm(workout.value)}
+                        >
+                          <Ionicons 
+                            name={workout.icon as any} 
+                            size={24} 
+                            color={challengeWorkoutForm === workout.value ? colors.tint : colors.foreground} 
+                          />
+                          <Text style={[
+                            styles.workoutFormText,
+                            { color: colors.foreground }
+                          ]}>
+                            {workout.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.sectionLabel, { color: colors.foreground, marginTop: Spacing.md }]}>
+                      Challenge Description (Optional)
+                    </Text>
+                    <TextInput
+                      style={[styles.textInput, { color: colors.foreground, borderColor: colors.border, minHeight: 80 }]}
+                      placeholder="Add details about the challenge..."
+                      placeholderTextColor={colors.foreground + '80'}
+                      value={challengeNote}
+                      onChangeText={setChallengeNote}
+                      multiline
+                      maxLength={300}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Select Friends to Challenge</Text>
+                    <View style={styles.friendsList}>
+                      {friends.length === 0 ? (
+                        <Text style={[styles.emptySubtext, { color: colors.foreground, opacity: 0.6 }]}>
+                          No friends yet. Add friends to challenge them!
+                        </Text>
+                      ) : (
+                        friends.map((friend) => {
+                          const isSelected = selectedChallengeFriends.some(f => f.id === friend.id);
+                          return (
+                            <TouchableOpacity
+                              key={friend.id}
+                              style={[
+                                styles.friendItem,
+                                { borderColor: colors.border },
+                                isSelected && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                              ]}
+                              onPress={() => toggleChallengeFriendSelection(friend)}
+                            >
+                              {friend.avatar_url ? (
+                                <Image source={{ uri: friend.avatar_url }} style={styles.friendAvatar} />
+                              ) : (
+                                <View style={[styles.friendAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                                  <Ionicons name="person" size={16} color={colors.foreground} />
+                                </View>
+                              )}
+                              <Text style={[styles.friendName, { color: colors.foreground }]}>
+                                {friend.first_name} {friend.last_name}
+                              </Text>
+                              {isSelected && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.tint} style={styles.checkmark} />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </View>
+                  </>
+                )}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                {challengeStep === 1 ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.fullWidthButton,
+                      { backgroundColor: colors.tint },
+                      (!challengeWorkoutForm || (challengeTimeOption === 'set' && (!challengeDateTime || !challengeDuration))) && styles.buttonDisabled
+                    ]}
+                    onPress={() => setChallengeStep(2)}
+                    disabled={!challengeWorkoutForm || (challengeTimeOption === 'set' && (!challengeDateTime || !challengeDuration))}
+                  >
+                    <Text style={styles.fullWidthButtonText}>Next: Select Friends</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.buttonRow}>
+                    <TouchableOpacity
+                      style={[styles.halfButton, { backgroundColor: colors.background, borderColor: colors.border }]}
+                      onPress={() => setChallengeStep(1)}
+                    >
+                      <Text style={[styles.halfButtonText, { color: colors.foreground }]}>Back</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.halfButton,
+                        { backgroundColor: colors.tint },
+                        (selectedChallengeFriends.length === 0 || isSendingChallenges) && styles.buttonDisabled
+                      ]}
+                      onPress={handleSendChallenges}
+                      disabled={selectedChallengeFriends.length === 0 || isSendingChallenges}
+                    >
+                      {isSendingChallenges ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <Ionicons name="flash" size={18} color="#fff" style={{ marginRight: 8 }} />
+                          <Text style={styles.fullWidthButtonText}>Send Challenge</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -833,5 +1729,277 @@ const styles = StyleSheet.create({
   },
   keyboardAvoidingView: {
     width: '100%',
+  },
+  stepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: Spacing.md,
+  },
+  stepCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+  },
+  stepText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  stepLine: {
+    width: 40,
+    height: 2,
+  },
+  modalScroll: {
+    maxHeight: '60%',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: Spacing.sm,
+  },
+  eventsList: {
+    gap: Spacing.sm,
+  },
+  eventItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  eventContent: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: Spacing.xs,
+  },
+  eventDescription: {
+    fontSize: 13,
+    marginBottom: Spacing.xs,
+  },
+  eventDetails: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    flexWrap: 'wrap',
+  },
+  eventDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  eventDetailText: {
+    fontSize: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    marginTop: Spacing.md,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xl * 2,
+  },
+  friendsList: {
+    gap: Spacing.sm,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  friendAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: Spacing.sm,
+  },
+  avatarPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendName: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  checkmark: {
+    marginLeft: 'auto',
+  },
+  modalFooter: {
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  fullWidthButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  fullWidthButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  halfButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  halfButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  timeOptionContainer: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  timeOptionButton: {
+    flex: 1,
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  timeOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: Spacing.xs,
+  },
+  timeOptionDesc: {
+    fontSize: 11,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 16,
+  },
+  durationContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  durationButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  durationText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  workoutFormGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  workoutFormButton: {
+    width: '48%',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  workoutFormText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: Spacing.xs,
+  },
+  notificationItemContainer: {
+    borderBottomWidth: 1,
+  },
+  notificationActions: {
+    padding: Spacing.md,
+    paddingTop: 0,
+  },
+  detailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  detailsButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  expandedDetails: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  detailValue: {
+    fontSize: 12,
+    flex: 1,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  acceptButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  declineButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  actionButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
   },
 });
