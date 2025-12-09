@@ -1,7 +1,7 @@
 import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 // Base64 encoding function that works in React Native
@@ -87,12 +87,18 @@ class FitbitService {
       const baseUrl = process.env.EXPO_PUBLIC_APP_URL || 'http://localhost:8081';
       this.redirectUri = baseUrl.replace(/\/$/, ''); // Remove trailing slash if present
     } else {
+      // Use custom scheme for native apps
+      // In development with Expo Go, this will be exp://... 
+      // In production builds, this will be lifeflow://...
       this.redirectUri = AuthSession.makeRedirectUri({
         scheme: 'lifeflow',
         path: 'auth/fitbit-callback',
+        // Force native scheme even in Expo Go for consistency
+        native: 'lifeflow://auth/fitbit-callback',
       });
     }
     
+    console.log('🔧 FitbitService initialized with redirectUri:', this.redirectUri);
   }
 
   /**
@@ -141,25 +147,79 @@ class FitbitService {
    */
   async authorize(): Promise<FitbitTokens | null> {
     try {
+      console.log('🟢 authorize() called');
+      
+      // Dismiss any existing browser sessions first
+      console.log('🔵 Attempting to dismiss browser...');
+      try {
+        const dismissPromise = WebBrowser.dismissBrowser();
+        console.log('🔵 Dismiss promise created, awaiting...');
+        await Promise.race([
+          dismissPromise,
+          new Promise((resolve) => setTimeout(() => {
+            console.log('⚠️ Dismiss timeout after 2s');
+            resolve(null);
+          }, 2000))
+        ]);
+        console.log('✅ Browser dismissed (or timed out)');
+      } catch (dismissError) {
+        console.log('⚠️ Could not dismiss browser:', dismissError);
+      }
+      
+      console.log('🔐 Generating PKCE codes...');
       // Generate PKCE code verifier (43-128 characters, URL-safe)
       const codeVerifier = this.generateCodeVerifier();
       const codeChallenge = await this.generateCodeChallenge(codeVerifier);
+      console.log('✅ PKCE codes generated');
       
-      const authRequest = new AuthSession.AuthRequest({
+      console.log('🔐 Fitbit OAuth Config:', {
         clientId: FITBIT_CLIENT_ID,
-        scopes: ['activity', 'heartrate', 'sleep', 'profile'],
         redirectUri: this.redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-        extraParams: {
-          code_challenge: codeChallenge,
-          code_challenge_method: 'S256',
-        },
+        scopes: ['activity', 'heartrate', 'sleep', 'profile'],
       });
+      
+      // Build the authorization URL manually to debug
+      const authUrl = `${discovery.authorizationEndpoint}?` + 
+        `client_id=${FITBIT_CLIENT_ID}&` +
+        `response_type=code&` +
+        `scope=${encodeURIComponent('activity heartrate sleep profile')}&` +
+        `redirect_uri=${encodeURIComponent(this.redirectUri)}&` +
+        `code_challenge=${codeChallenge}&` +
+        `code_challenge_method=S256`;
+      
+      console.log('📱 Auth URL:', authUrl);
+      console.log('📱 Opening OAuth browser...');
+      
+      // Try using WebBrowser directly instead of AuthSession
+      // Add timeout to prevent hanging indefinitely
+      const browserPromise = WebBrowser.openAuthSessionAsync(
+        authUrl,
+        this.redirectUri
+      );
+      
+      const timeoutPromise = new Promise<any>((_, reject) => {
+        setTimeout(() => {
+          console.log('⏱️ Browser timeout after 120 seconds, dismissing...');
+          WebBrowser.dismissBrowser().catch(() => {});
+          reject(new Error('OAuth browser timed out'));
+        }, 120000); // 2 minute timeout
+      });
+      
+      const result = await Promise.race([browserPromise, timeoutPromise]);
 
-      const result = await authRequest.promptAsync(discovery);
+      console.log('📱 OAuth result:', result);
 
-      if (result.type === 'success') {
-        const { code } = result.params;
+      if (result.type === 'success' && result.url) {
+        // Parse the authorization code from the redirect URL
+        const url = new URL(result.url);
+        const code = url.searchParams.get('code');
+        
+        if (!code) {
+          console.error('❌ No authorization code in redirect URL');
+          throw new Error('No authorization code received');
+        }
+        
+        console.log('✅ Authorization code received');
         
         // Exchange code for tokens with code verifier
         const tokens = await this.exchangeCodeForTokens(code, codeVerifier);
@@ -168,11 +228,19 @@ class FitbitService {
           await this.saveTokens(tokens);
           return tokens;
         }
+      } else if (result.type === 'cancel') {
+        console.log('⚠️ OAuth cancelled by user');
+        return null;
+      } else {
+        console.error('❌ OAuth failed:', result);
+        throw new Error('OAuth authorization failed');
       }
 
       return null;
     } catch (error) {
-      console.error('Fitbit authorization error:', error);
+      console.error('❌ Fitbit authorization error:', error);
+      // Ensure browser is dismissed on error
+      await WebBrowser.dismissBrowser();
       throw error;
     }
   }
@@ -340,10 +408,15 @@ class FitbitService {
    */
   async getTodayActivity(): Promise<FitbitActivityData | null> {
     try {
+      console.log('📊 Fetching Fitbit activity data...');
       const accessToken = await this.getValidAccessToken();
-      if (!accessToken) return null;
+      if (!accessToken) {
+        console.log('❌ No valid access token');
+        return null;
+      }
 
       const today = new Date().toISOString().split('T')[0];
+      console.log('📊 Fetching activity for date:', today);
       const response = await fetch(
         `https://api.fitbit.com/1/user/-/activities/date/${today}.json`,
         {
@@ -354,11 +427,20 @@ class FitbitService {
       );
 
       if (!response.ok) {
+        console.error('❌ Fitbit API error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
         throw new Error(`Failed to fetch activity data: ${response.statusText}`);
       }
 
       const data = await response.json();
       const summary = data.summary;
+
+      console.log('✅ Activity data fetched:', {
+        steps: summary.steps,
+        calories: summary.caloriesOut,
+        activeMinutes: summary.fairlyActiveMinutes + summary.veryActiveMinutes,
+      });
 
       return {
         steps: summary.steps || 0,
@@ -368,7 +450,7 @@ class FitbitService {
         floors: summary.floors || 0,
       };
     } catch (error) {
-      console.error('Error fetching Fitbit activity data:', error);
+      console.error('❌ Error fetching Fitbit activity data:', error);
       return null;
     }
   }

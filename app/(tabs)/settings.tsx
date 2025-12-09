@@ -44,6 +44,10 @@ export default function SettingsScreen() {
   );
 
   const handleFitbitPress = async () => {
+    console.log('🔵 Fitbit button pressed, Platform:', Platform.OS);
+    console.log('🔵 Fitbit connected:', fitbitConnected);
+    console.log('🔵 Fitbit loading:', fitbitLoading);
+    
     // Fitbit OAuth doesn't work on web due to CORS restrictions
     // It requires a backend proxy server
     if (Platform.OS === 'web') {
@@ -55,29 +59,45 @@ export default function SettingsScreen() {
       return;
     }
 
-    if (fitbitConnected) {
-      // Disconnect
-      const confirmed = await new Promise<boolean>((resolve) => {
-        Alert.alert('Disconnect Fitbit', 'Are you sure you want to disconnect from Fitbit?', [
-          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Disconnect', style: 'destructive', onPress: () => resolve(true) },
-        ]);
-      });
-      
-      if (confirmed) {
-        const success = await disconnectFitbit();
+    if (fitbitLoading) {
+      console.log('⚠️ Fitbit operation already in progress');
+      return;
+    }
+
+    try {
+      if (fitbitConnected) {
+        // Disconnect
+        const confirmed = await new Promise<boolean>((resolve) => {
+          Alert.alert('Disconnect Fitbit', 'Are you sure you want to disconnect from Fitbit?', [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'Disconnect', style: 'destructive', onPress: () => resolve(true) },
+          ]);
+        });
+        
+        if (confirmed) {
+          console.log('🔴 Disconnecting from Fitbit...');
+          const success = await disconnectFitbit();
+          if (success) {
+            Alert.alert('Success', 'Disconnected from Fitbit');
+          } else {
+            Alert.alert('Error', 'Failed to disconnect from Fitbit');
+          }
+        }
+      } else {
+        // Connect
+        console.log('🟢 Connecting to Fitbit...');
+        const success = await connectFitbit();
+        console.log('🟢 Connect result:', success);
+        
         if (success) {
-          Alert.alert('Success', 'Disconnected from Fitbit');
+          Alert.alert('Success', 'Connected to Fitbit!');
+        } else {
+          Alert.alert('Error', 'Failed to connect to Fitbit. Please try again.');
         }
       }
-    } else {
-      // Connect
-      const success = await connectFitbit();
-      if (success) {
-        Alert.alert('Success', 'Connected to Fitbit!');
-      } else {
-        Alert.alert('Error', 'Failed to connect to Fitbit. Please try again.');
-      }
+    } catch (error) {
+      console.error('❌ Fitbit connection error:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to connect to Fitbit');
     }
   };
 

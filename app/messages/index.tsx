@@ -1,28 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Image,
-  RefreshControl,
-  ActivityIndicator,
-  Modal,
-  Alert,
-  Platform,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Card } from '@/components/ui/Card';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { messageService, ChatRoomWithDetails } from '@/services/messageService';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFriends } from '@/hooks/useFriends';
 import { Friend } from '@/services/friendService';
+import { ChatRoomWithDetails, messageService } from '@/services/messageService';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MessagesListScreen() {
   const colorScheme = useColorScheme();
@@ -319,7 +319,7 @@ export default function MessagesListScreen() {
                 <TouchableOpacity
                   style={[
                     styles.chatTypeButton,
-                    !isGroupChat && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                    !isGroupChat && { backgroundColor: colors.tint, borderColor: colors.tint }
                   ]}
                   onPress={() => {
                     setIsGroupChat(false);
@@ -327,23 +327,23 @@ export default function MessagesListScreen() {
                     setGroupName('');
                   }}
                 >
-                  <Ionicons name="person" size={20} color={!isGroupChat ? colors.tint : colors.foreground} />
-                  <Text style={[styles.chatTypeText, { color: !isGroupChat ? colors.tint : colors.foreground }]}>
+                  <Ionicons name="person" size={20} color={!isGroupChat ? '#fff' : colors.foreground} />
+                  <Text style={[styles.chatTypeText, { color: !isGroupChat ? '#fff' : colors.foreground }]}>
                     Direct
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.chatTypeButton,
-                    isGroupChat && { backgroundColor: colors.tint + '20', borderColor: colors.tint }
+                    isGroupChat && { backgroundColor: colors.tint, borderColor: colors.tint }
                   ]}
                   onPress={() => {
                     setIsGroupChat(true);
                     setSelectedFriend(null);
                   }}
                 >
-                  <Ionicons name="people" size={20} color={isGroupChat ? colors.tint : colors.foreground} />
-                  <Text style={[styles.chatTypeText, { color: isGroupChat ? colors.tint : colors.foreground }]}>
+                  <Ionicons name="people" size={20} color={isGroupChat ? '#fff' : colors.foreground} />
+                  <Text style={[styles.chatTypeText, { color: isGroupChat ? '#fff' : colors.foreground }]}>
                     Group
                   </Text>
                 </TouchableOpacity>
