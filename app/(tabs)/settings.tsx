@@ -1,10 +1,13 @@
 import { Card } from '@/components/ui/Card';
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFitbit } from '@/hooks/useFitbit';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
+import { useThemeControl } from '@/hooks/useThemeControl';
+import { googleCalendarService } from '@/services/googleCalendarService';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useState } from 'react';
 import {
     Alert,
@@ -31,10 +34,11 @@ type SettingItem = {
 
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const { theme, setTheme } = useThemeControl();
+  const colors = Colors[theme];
   const insets = useSafeAreaInsets();
   const { isConnected: fitbitConnected, isLoading: fitbitLoading, connect: connectFitbit, disconnect: disconnectFitbit } = useFitbit();
+  const { isAuthenticated: calendarConnected, signOut: disconnectCalendar } = useGoogleCalendar();
   const [notifications, setNotifications] = useState(true);
   const [activitySharing, setActivitySharing] = useState(
     user?.activity_sharing ?? true
@@ -101,6 +105,48 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleGoogleCalendarPress = async () => {
+    if (!user?.id) return;
+
+    if (calendarConnected) {
+      // Disconnect
+      const confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert('Disconnect Google Calendar', 'Are you sure you want to disconnect from Google Calendar?', [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Disconnect', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+      
+      if (confirmed) {
+        try {
+          await disconnectCalendar();
+          Alert.alert('Success', 'Disconnected from Google Calendar');
+        } catch (error) {
+          Alert.alert('Error', 'Failed to disconnect from Google Calendar');
+        }
+      }
+    } else {
+      // Connect
+      try {
+        console.log('🔵 Getting Google OAuth URL...');
+        const authUrl = await googleCalendarService.getAuthUrl(user.id);
+        console.log('🔵 Opening OAuth browser:', authUrl);
+        
+        // Open OAuth in browser
+        const result = await WebBrowser.openAuthSessionAsync(authUrl, 'lifeflow://');
+        
+        if (result.type === 'success') {
+          Alert.alert('Success', 'Google Calendar connected! Your events will now sync automatically.');
+        } else if (result.type === 'cancel') {
+          console.log('⚠️ OAuth cancelled by user');
+        }
+      } catch (error) {
+        console.error('❌ Google Calendar connection error:', error);
+        Alert.alert('Error', 'Failed to connect to Google Calendar. Please try again.');
+      }
+    }
+  };
+
   const handleLogout = async () => {
     // On web, use window.confirm instead of Alert.alert
     const confirmed = Platform.OS === 'web' 
@@ -128,6 +174,18 @@ export default function SettingsScreen() {
   };
 
   const settingsSections: Array<{ title: string; items: SettingItem[] }> = [
+    {
+      title: 'Appearance',
+      items: [
+        {
+          icon: 'moon-outline',
+          label: 'Dark Mode',
+          value: theme === 'dark',
+          onToggle: (value: boolean) => setTheme(value ? 'dark' : 'light'),
+          isSwitch: true,
+        },
+      ],
+    },
     {
       title: 'Account',
       items: [
@@ -201,8 +259,8 @@ export default function SettingsScreen() {
         {
           icon: 'calendar-outline',
           label: 'Google Calendar',
-          subtitle: 'Not connected',
-          onPress: () => Alert.alert('Coming Soon', 'Google Calendar integration will be available in Phase 3'),
+          subtitle: calendarConnected ? 'Connected' : 'Not connected',
+          onPress: handleGoogleCalendarPress,
           showChevron: true,
         },
       ],
@@ -248,8 +306,8 @@ export default function SettingsScreen() {
                       <Switch
                         value={item.value as boolean}
                         onValueChange={item.onToggle}
-                        trackColor={{ false: colors.border, true: colors.primary + '80' }}
-                        thumbColor={item.value ? colors.primary : colors.muted}
+                        trackColor={{ false: colors.border, true: colors.primary }}
+                        thumbColor={item.value ? '#ffffff' : '#8e8e93'}
                       />
                     ) : item.value && typeof item.value === 'string' ? (
                       <Text style={[styles.settingValue, { color: colors.mutedForeground }]}>{item.value}</Text>

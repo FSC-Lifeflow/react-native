@@ -13,7 +13,6 @@ import { CalendarEvent, googleCalendarService } from '@/services/googleCalendarS
 import { Notification, notificationService } from '@/services/notificationService';
 import { workoutService } from '@/services/workoutService';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -38,7 +37,7 @@ export default function DashboardScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
-  const { isConnected, isLoading, data, error, refresh } = useFitbit();
+  const { isConnected, isLoading, data, error, refresh, connect: connectFitbit } = useFitbit();
   const { unreadCount, refreshUnreadCount } = useNotifications();
   
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
@@ -380,6 +379,22 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleFitbitConnect = async () => {
+    try {
+      console.log('🔵 Dashboard: Connecting to Fitbit...');
+      const success = await connectFitbit();
+      
+      if (success) {
+        Alert.alert('Success', 'Connected to Fitbit! Your health data will now sync automatically.');
+      } else {
+        Alert.alert('Connection Cancelled', 'Fitbit connection was cancelled.');
+      }
+    } catch (error) {
+      console.error('❌ Dashboard: Fitbit connection error:', error);
+      Alert.alert('Error', 'Failed to connect to Fitbit. Please try again.');
+    }
+  };
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -445,9 +460,14 @@ export default function DashboardScreen() {
             {Platform.OS !== 'web' && (
               <TouchableOpacity 
                 style={[styles.connectButton, { backgroundColor: colors.primary }]}
-                onPress={() => router.push('/(tabs)/settings')}
+                onPress={handleFitbitConnect}
+                disabled={isLoading}
               >
-                <Text style={styles.connectButtonText}>Connect</Text>
+                {isLoading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.connectButtonText}>Connect</Text>
+                )}
               </TouchableOpacity>
             )}
           </View>

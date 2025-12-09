@@ -135,6 +135,31 @@ export const googleCalendarService = {
   },
 
   /**
+   * Get OAuth authorization URL
+   */
+  async getAuthUrl(userId: string): Promise<string> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/google/auth-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get auth URL');
+      }
+
+      const data = await response.json();
+      return data.authUrl;
+    } catch (error) {
+      console.error('Get auth URL error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Disconnect Google Calendar
    */
   async disconnect(userId: string): Promise<void> {

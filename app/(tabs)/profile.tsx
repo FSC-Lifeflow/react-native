@@ -2,8 +2,12 @@ import { Card } from '@/components/ui/Card';
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/authService';
+import { fitbitService } from '@/services/fitbitService';
+import { friendService } from '@/services/friendService';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
@@ -79,12 +83,13 @@ export default function ProfileScreen() {
           console.error('Failed to fetch friends:', error);
         }
 
-        // Fetch workouts count from Fitbit
+        // Fetch workouts count from Fitbit activity data
         try {
-          const activities = await fitbitService.getActivities();
-          if (activities?.summary?.activityCalories) {
-            // Count activities that burned calories (indicating a workout)
-            setStats(prev => ({ ...prev, workouts: activities.summary.activityCalories > 0 ? 1 : 0 }));
+          const activity = await fitbitService.getTodayActivity();
+          if (activity) {
+            // Count as a workout if there are active minutes
+            const hasWorkout = (activity.activeMinutes || 0) > 0 ? 1 : 0;
+            setStats(prev => ({ ...prev, workouts: hasWorkout }));
           }
         } catch (error) {
           console.error('Failed to fetch workouts:', error);
@@ -107,18 +112,87 @@ export default function ProfileScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
 
       if (!result.canceled && result.assets[0]) {
-        // TODO: Upload image to Supabase storage
-        Alert.alert('Coming Soon', 'Avatar upload will be implemented in the next phase');
+        setLoading(true);
+        await uploadAvatar(result.assets[0].uri);
       }
     } catch (error) {
+      console.error('Error picking image:', error);
       Alert.alert('Error', 'Failed to pick image');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadAvatar = async (uri: string) => {
+    try {
+      if (!user?.id) return;
+
+      // Read the file as base64
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+
+      // Generate unique filename - match web app structure: userId/timestamp.ext
+      const fileExt = uri.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`; // Upload to user's folder like web app
+
+      // Convert base64 to ArrayBuffer for upload
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Upload to Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, bytes.buffer, {
+          contentType: `image/${fileExt}`,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Get public URL with cache-busting timestamp
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const avatarUrlWithTimestamp = `${publicUrl}?t=${Date.now()}`;
+
+      console.log('📸 Uploaded avatar URL:', avatarUrlWithTimestamp);
+
+      // Update user profile with new avatar URL
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: avatarUrlWithTimestamp })
+        .eq('id', user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      console.log('✅ Avatar URL updated in database');
+
+      // Refresh user data
+      await refreshUser();
+      
+      console.log('✅ User data refreshed, new avatar:', user?.avatar_url);
+      
+      Alert.alert('Success', 'Avatar updated successfully!');
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      Alert.alert('Error', 'Failed to upload avatar. Please try again.');
     }
   };
 
