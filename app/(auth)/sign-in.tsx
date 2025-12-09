@@ -51,11 +51,23 @@ export default function SignInScreen() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      await loginWithGoogle();
-      // Browser opened, waiting for OAuth callback via deep link
-      console.log('⏳ OAuth browser opened, waiting for callback...');
-      setLoading(false);
+      console.log('🔐 Starting Google sign-in...');
+      const result = await loginWithGoogle();
+      
+      console.log('🔐 OAuth result:', result);
+      
+      // If we got a URL back, it means the OAuth flow completed
+      if (result && result.url) {
+        console.log('✅ OAuth completed, navigating to dashboard');
+        // The AuthContext should have updated the user state
+        // Navigate to dashboard
+        router.replace('/(tabs)/dashboard');
+      } else {
+        console.log('⏳ OAuth in progress...');
+        setLoading(false);
+      }
     } catch (error) {
+      console.error('❌ Google sign-in error:', error);
       Alert.alert(
         'Google Sign In Failed',
         error instanceof Error ? error.message : 'An error occurred'

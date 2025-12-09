@@ -27,7 +27,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
@@ -79,6 +79,34 @@ export default function RegisterScreen() {
         Alert.alert('Registration Failed', errorMessage);
       }
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      console.log('🔐 Starting Google sign-in...');
+      const result = await loginWithGoogle();
+      
+      console.log('🔐 OAuth result:', result);
+      
+      // If we got a URL back, it means the OAuth flow completed
+      if (result && result.url) {
+        console.log('✅ OAuth completed, navigating to dashboard');
+        // The AuthContext should have updated the user state
+        // Navigate to dashboard
+        router.replace('/(tabs)/dashboard');
+      } else {
+        console.log('⏳ OAuth in progress...');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('❌ Google sign-in error:', error);
+      Alert.alert(
+        'Google Sign In Failed',
+        error instanceof Error ? error.message : 'An error occurred'
+      );
       setLoading(false);
     }
   };
@@ -216,6 +244,21 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
+          <View style={styles.divider}>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[styles.dividerText, { color: colors.mutedForeground }]}>OR</Text>
+            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.googleButton, { borderColor: colors.border }, loading && styles.buttonDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+          >
+            <Ionicons name="logo-google" size={20} color={colors.foreground} style={styles.googleIcon} />
+            <Text style={[styles.googleButtonText, { color: colors.foreground }]}>Continue with Google</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.linkButton}
             onPress={() => router.push('/(auth)/sign-in')}
@@ -297,6 +340,34 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.xl,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: Spacing.md,
+    fontSize: Typography.fontSizes.sm,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleIcon: {
+    marginRight: Spacing.sm,
+  },
+  googleButtonText: {
     fontSize: Typography.fontSizes.base,
     fontWeight: Typography.fontWeights.semibold,
   },

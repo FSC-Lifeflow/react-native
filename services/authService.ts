@@ -170,12 +170,63 @@ export const authService = {
   },
 
   /**
-   * Google OAuth login - Not yet implemented
-   * TODO: Implement Google OAuth login flow
-   * For now, users should sign up with email/password and connect Google Calendar separately
+   * Initiates Google OAuth login flow for React Native
+   * Uses Supabase's built-in OAuth with expo-web-browser
    */
   async loginWithGoogle() {
-    throw new Error('Google OAuth login is not yet implemented. Please sign up with email and password, then connect your Google Calendar from the dashboard.');
+    try {
+      console.log('🔍 Starting Google OAuth flow...');
+      
+      // Get the redirect URL for the current platform
+      // For mobile, this will be the app's deep link scheme
+      const redirectUrl = 'lifeflow://auth/callback';
+      console.log('🔍 Redirect URL:', redirectUrl);
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+          skipBrowserRedirect: true, // We'll handle the browser redirect manually
+        },
+      });
+
+      if (error) {
+        console.error('❌ Google OAuth error:', error);
+        throw new Error(error.message);
+      }
+
+      if (!data.url) {
+        throw new Error('No OAuth URL returned from Supabase');
+      }
+
+      console.log('✅ Google OAuth URL received:', data.url);
+      console.log('🌐 Opening browser...');
+      
+      // Open the OAuth URL in the browser
+      const result = await WebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectUrl
+      );
+
+      console.log('🔙 Browser result:', result.type);
+
+      if (result.type === 'success' && result.url) {
+        console.log('✅ OAuth successful, callback URL:', result.url);
+        // The URL will be handled by the deep link listener
+        return { url: result.url, provider: data.provider };
+      } else if (result.type === 'cancel') {
+        throw new Error('OAuth cancelled by user');
+      } else {
+        throw new Error('OAuth failed');
+      }
+    } catch (error) {
+      console.error('❌ Google OAuth failed:', error);
+      throw error;
+    }
   },
 
   /**
