@@ -18,7 +18,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Card } from '@/components/ui/Card';
 import { useFriends, useFriendRequests, useUserSearch, useSendFriendRequest } from '@/hooks/useFriends';
-import { Friend, FriendRequest, UserSearchResult } from '@/services/friendService';
+import { Friend, FriendRequest, UserSearchResult, friendService } from '@/services/friendService';
 import { useRouter } from 'expo-router';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 
@@ -52,6 +52,7 @@ export default function FriendsScreen() {
   const { unreadCount } = useUnreadMessages();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -77,6 +78,41 @@ export default function FriendsScreen() {
 
     if (Platform.OS === 'web' && confirmUnfriend) {
       unfriend(friendId);
+    }
+  };
+
+  const handleBlockUser = async (userId: string, userName: string) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Are you sure you want to block ${userName}? They will not be able to send you friend requests.`)) {
+        await blockUser(userId, userName);
+      }
+    } else {
+      Alert.alert(
+        'Block User',
+        `Are you sure you want to block ${userName}? They will not be able to send you friend requests.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Block', 
+            style: 'destructive', 
+            onPress: () => blockUser(userId, userName) 
+          },
+        ]
+      );
+    }
+  };
+
+  const blockUser = async (userId: string, userName: string) => {
+    setBlockingUserId(userId);
+    try {
+      await friendService.blockUser(userId);
+      Alert.alert('User Blocked', `${userName} has been blocked successfully.`);
+      // Refresh the requests list
+      await Promise.all([refetchReceived(), refetchSent()]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to block user');
+    } finally {
+      setBlockingUserId(null);
     }
   };
 
@@ -176,6 +212,17 @@ export default function FriendsScreen() {
                   disabled={isRejecting}
                 >
                   <Ionicons name="close" size={20} color="#ff3b30" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.blockButton]}
+                  onPress={() => handleBlockUser(user.id, `${user.first_name} ${user.last_name}`)}
+                  disabled={blockingUserId === user.id}
+                >
+                  {blockingUserId === user.id ? (
+                    <ActivityIndicator size="small" color="#ff3b30" />
+                  ) : (
+                    <Ionicons name="ban" size={20} color="#ff3b30" />
+                  )}
                 </TouchableOpacity>
               </>
             ) : (
@@ -318,7 +365,23 @@ export default function FriendsScreen() {
               <>
                 {receivedRequests.length > 0 && (
                   <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Received Requests</Text>
+                    <View style={styles.sectionTitleContainer}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}>Received Requests</Text>
+                    </View>
+                    <View style={styles.iconLegend}>
+                      <View style={styles.legendItem}>
+                        <Ionicons name="checkmark" size={16} color={colors.tint} />
+                        <Text style={[styles.legendText, { color: colors.subtext }]}>Accept</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <Ionicons name="close" size={16} color="#ff3b30" />
+                        <Text style={[styles.legendText, { color: colors.subtext }]}>Decline</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <Ionicons name="ban" size={16} color="#ff3b30" />
+                        <Text style={[styles.legendText, { color: colors.subtext }]}>Block</Text>
+                      </View>
+                    </View>
                     {receivedRequests.map((request) => renderRequestItem(request, 'received'))}
                   </View>
                 )}
@@ -489,9 +552,27 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: Spacing.lg,
   },
+  sectionTitleContainer: {
+    marginBottom: Spacing.xs,
+  },
   sectionTitle: {
     ...Typography.h3,
+    marginBottom: Spacing.xs,
+  },
+  iconLegend: {
+    flexDirection: 'row',
+    gap: Spacing.md,
     marginBottom: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  legendText: {
+    ...Typography.caption,
+    fontSize: 12,
   },
   friendCard: {
     marginBottom: Spacing.sm,
@@ -542,6 +623,9 @@ const styles = StyleSheet.create({
     // backgroundColor set dynamically
   },
   rejectButton: {
+    backgroundColor: '#ffebee',
+  },
+  blockButton: {
     backgroundColor: '#ffebee',
   },
   unfriendButton: {

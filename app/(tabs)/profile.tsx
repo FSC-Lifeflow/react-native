@@ -3,6 +3,8 @@ import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { authService } from '@/services/authService';
+import { friendService, type BlockedUser } from '@/services/friendService';
+import { fitbitService } from '@/services/fitbitService';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
@@ -50,6 +52,11 @@ export default function ProfileScreen() {
     friends: 0,
     workouts: 0,
   });
+  
+  // Blocked users state
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false);
 
   // Fetch user fitness preferences and stats on mount
   useEffect(() => {
@@ -461,7 +468,7 @@ export default function ProfileScreen() {
 
         {/* Save Button */}
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.primary }]}
+          style={[styles.savePreferencesButton, { backgroundColor: colors.primary }]}
           onPress={handleSaveFitnessPreferences}
           disabled={loading}
         >
@@ -470,10 +477,103 @@ export default function ProfileScreen() {
           ) : (
             <>
               <Ionicons name="save-outline" size={20} color="#fff" />
-              <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Save Preferences</Text>
+              <Text style={[styles.savePreferencesButtonText, { color: colors.primaryForeground }]}>Save Preferences</Text>
             </>
           )}
         </TouchableOpacity>
+      </Card>
+
+      {/* Blocked Users Section */}
+      <Card style={styles.section}>
+        <TouchableOpacity 
+          style={styles.sectionHeader}
+          onPress={async () => {
+            if (!showBlockedUsers) {
+              setLoadingBlockedUsers(true);
+              try {
+                const blocked = await friendService.getBlockedUsers();
+                setBlockedUsers(blocked);
+              } catch (error) {
+                console.error('Failed to load blocked users:', error);
+                Alert.alert('Error', 'Failed to load blocked users');
+              } finally {
+                setLoadingBlockedUsers(false);
+              }
+            }
+            setShowBlockedUsers(!showBlockedUsers);
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="ban" size={20} color={colors.destructive} style={{ marginRight: Spacing.sm }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Blocked Users</Text>
+          </View>
+          <Ionicons 
+            name={showBlockedUsers ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color={colors.mutedForeground} 
+          />
+        </TouchableOpacity>
+
+        {showBlockedUsers && (
+          <View style={{ marginTop: Spacing.md }}>
+            {loadingBlockedUsers ? (
+              <View style={{ padding: Spacing.lg, alignItems: 'center' }}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : blockedUsers.length > 0 ? (
+              blockedUsers.map((blockedUser) => (
+                <View 
+                  key={blockedUser.id} 
+                  style={[
+                    styles.blockedUserItem,
+                    { borderBottomColor: colors.border }
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.blockedUserName, { color: colors.foreground }]}>
+                      {blockedUser.user.first_name} {blockedUser.user.last_name}
+                    </Text>
+                    <Text style={[styles.blockedUserUsername, { color: colors.mutedForeground }]}>
+                      @{blockedUser.user.username}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.unblockButton, { backgroundColor: colors.primary }]}
+                    onPress={async () => {
+                      Alert.alert(
+                        'Unblock User',
+                        `Are you sure you want to unblock ${blockedUser.user.first_name} ${blockedUser.user.last_name}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Unblock',
+                            onPress: async () => {
+                              try {
+                                await friendService.unblockUser(blockedUser.blocked_id);
+                                setBlockedUsers(prev => prev.filter(u => u.id !== blockedUser.id));
+                                Alert.alert('Success', 'User unblocked successfully');
+                              } catch (error) {
+                                console.error('Failed to unblock user:', error);
+                                Alert.alert('Error', 'Failed to unblock user');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.unblockButtonText, { color: colors.primaryForeground }]}>Unblock</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <View style={{ padding: Spacing.lg, alignItems: 'center' }}>
+                <Ionicons name="people" size={40} color={colors.mutedForeground} style={{ opacity: 0.5 }} />
+                <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No blocked users</Text>
+              </View>
+            )}
+          </View>
+        )}
       </Card>
 
       {/* Picker Modal */}
@@ -706,7 +806,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.base,
     minHeight: 80,
   },
-  saveButton: {
+  savePreferencesButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -714,7 +814,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     marginTop: Spacing.lg,
   },
-  saveButtonText: {
+  savePreferencesButtonText: {
     fontSize: Typography.fontSizes.base,
     fontWeight: Typography.fontWeights.semibold,
     marginLeft: Spacing.sm,
@@ -755,5 +855,32 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: Typography.fontSizes.base,
     flex: 1,
+  },
+  blockedUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  blockedUserName: {
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
+  },
+  blockedUserUsername: {
+    fontSize: Typography.fontSizes.sm,
+    marginTop: Spacing.xs,
+  },
+  unblockButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  unblockButtonText: {
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
+  },
+  emptyText: {
+    fontSize: Typography.fontSizes.sm,
+    marginTop: Spacing.sm,
   },
 });
