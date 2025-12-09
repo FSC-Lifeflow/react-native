@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 
 /**
  * User post data structure
@@ -278,18 +277,18 @@ export const postService = {
    */
   async uploadImage(imageUri: string, userId: string): Promise<string> {
     try {
-      // Read the file as base64
-      const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: 'base64',
-      });
-
-      // Get file extension from URI
-      const fileExt = imageUri.split('.').pop() || 'jpg';
-      const fileName = `${userId}/${Date.now()}.${fileExt}`;
-
-      // Convert base64 to blob
-      const response = await fetch(`data:image/${fileExt};base64,${base64}`);
+      // Fetch the image as a blob
+      const response = await fetch(imageUri);
       const blob = await response.blob();
+
+      // Get file extension from URI or blob type
+      let fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
+      if (blob.type) {
+        const typeExt = blob.type.split('/')[1];
+        if (typeExt) fileExt = typeExt;
+      }
+
+      const fileName = `${userId}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
@@ -297,7 +296,7 @@ export const postService = {
         .upload(fileName, blob, {
           cacheControl: '3600',
           upsert: false,
-          contentType: `image/${fileExt}`,
+          contentType: blob.type || `image/${fileExt}`,
         });
 
       if (error) {

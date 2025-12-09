@@ -16,12 +16,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Card } from '@/components/ui/Card';
 import { useFriendPosts, useCreatePost, useToggleLike, useDeletePost } from '@/hooks/usePosts';
 import { postService } from '@/services/postService';
+import { postInteractionService, type PostComment } from '@/services/postInteractionService';
 import { useAuth } from '@/contexts/AuthContext';
+import { MentionText } from '@/components/MentionText';
+import { MentionTextarea } from '@/components/MentionTextarea';
 import { motivationService } from '@/services/motivationService';
 import { useFriends } from '@/hooks/useFriends';
 import { Friend } from '@/services/friendService';
@@ -34,6 +38,7 @@ export default function FeedScreen() {
   const colors = Colors[colorScheme ?? 'light'];
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   
   const { posts, isLoading, refetch } = useFriendPosts();
   const { createPost, isCreating } = useCreatePost();
@@ -72,6 +77,20 @@ export default function FeedScreen() {
   const [challengeNote, setChallengeNote] = useState('');
   const [selectedChallengeFriends, setSelectedChallengeFriends] = useState<Friend[]>([]);
   const [isSendingChallenges, setIsSendingChallenges] = useState(false);
+  
+  // Comments states
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [postComments, setPostComments] = useState<Map<string, PostComment[]>>(new Map());
+  const [commentText, setCommentText] = useState<Map<string, string>>(new Map());
+  const [loadingComments, setLoadingComments] = useState<Set<string>>(new Set());
+  const [submittingComment, setSubmittingComment] = useState<Set<string>>(new Set());
+  
+  // Reply states
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const [commentReplies, setCommentReplies] = useState<Map<string, any[]>>(new Map());
+  const [replyText, setReplyText] = useState<Map<string, string>>(new Map());
+  const [loadingReplies, setLoadingReplies] = useState<Set<string>>(new Set());
+  const [submittingReply, setSubmittingReply] = useState<Set<string>>(new Set());
   
   const { friends } = useFriends();
   const { isAuthenticated: isCalendarConnected } = useGoogleCalendar();
@@ -118,6 +137,186 @@ export default function FeedScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => deletePost(postId) },
+      ]
+    );
+  };
+
+  const toggleComments = async (postId: string) => {
+    const newExpanded = new Set(expandedComments);
+    
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId);
+    } else {
+      newExpanded.add(postId);
+      // Load comments if not already loaded
+      if (!postComments.has(postId)) {
+        const newLoading = new Set(loadingComments);
+        newLoading.add(postId);
+        setLoadingComments(newLoading);
+        try {
+          const comments = await postInteractionService.getPostComments(postId);
+          setPostComments(new Map(postComments).set(postId, comments));
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load comments');
+        } finally {
+          const updatedLoading = new Set(loadingComments);
+          updatedLoading.delete(postId);
+          setLoadingComments(updatedLoading);
+        }
+      }
+    }
+    
+    setExpandedComments(newExpanded);
+  };
+
+  const handleAddComment = async (postId: string) => {
+    const text = commentText.get(postId);
+    if (!text?.trim()) return;
+    
+    const newSubmitting = new Set(submittingComment);
+    newSubmitting.add(postId);
+    setSubmittingComment(newSubmitting);
+    try {
+      const newComment = await postInteractionService.createComment(postId, text);
+      
+      // Add comment to local state
+      const currentComments = postComments.get(postId) || [];
+      setPostComments(new Map(postComments).set(postId, [...currentComments, newComment]));
+      
+      // Clear input
+      const newCommentText = new Map(commentText);
+      newCommentText.delete(postId);
+      setCommentText(newCommentText);
+      
+      // Refresh posts to update comment count
+      refetch();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add comment');
+    } finally {
+      const updatedSubmitting = new Set(submittingComment);
+      updatedSubmitting.delete(postId);
+      setSubmittingComment(updatedSubmitting);
+    }
+  };
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await postInteractionService.deleteComment(commentId);
+              
+              // Remove from local state
+              const currentComments = postComments.get(postId) || [];
+              setPostComments(
+                new Map(postComments).set(
+                  postId,
+                  currentComments.filter(c => c.id !== commentId)
+                )
+              );
+              
+              refetch();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete comment');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const toggleReplies = async (commentId: string) => {
+    const newExpanded = new Set(expandedReplies);
+    
+    if (newExpanded.has(commentId)) {
+      newExpanded.delete(commentId);
+    } else {
+      newExpanded.add(commentId);
+      // Load replies if not already loaded
+      if (!commentReplies.has(commentId)) {
+        const newLoading = new Set(loadingReplies);
+        newLoading.add(commentId);
+        setLoadingReplies(newLoading);
+        try {
+          const replies = await postInteractionService.getCommentReplies(commentId);
+          setCommentReplies(new Map(commentReplies).set(commentId, replies));
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load replies');
+        } finally {
+          const updatedLoading = new Set(loadingReplies);
+          updatedLoading.delete(commentId);
+          setLoadingReplies(updatedLoading);
+        }
+      }
+    }
+    
+    setExpandedReplies(newExpanded);
+  };
+
+  const handleAddReply = async (commentId: string) => {
+    const text = replyText.get(commentId);
+    if (!text?.trim()) return;
+    
+    const newSubmitting = new Set(submittingReply);
+    newSubmitting.add(commentId);
+    setSubmittingReply(newSubmitting);
+    try {
+      const newReply = await postInteractionService.createReply(commentId, text);
+      
+      // Add reply to local state
+      const currentReplies = commentReplies.get(commentId) || [];
+      setCommentReplies(new Map(commentReplies).set(commentId, [...currentReplies, newReply]));
+      
+      // Clear input
+      const newReplyText = new Map(replyText);
+      newReplyText.delete(commentId);
+      setReplyText(newReplyText);
+      
+      // Refresh to update reply counts
+      refetch();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add reply');
+    } finally {
+      const updatedSubmitting = new Set(submittingReply);
+      updatedSubmitting.delete(commentId);
+      setSubmittingReply(updatedSubmitting);
+    }
+  };
+
+  const handleDeleteReply = async (commentId: string, replyId: string) => {
+    Alert.alert(
+      'Delete Reply',
+      'Are you sure you want to delete this reply?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await postInteractionService.deleteReply(replyId);
+              
+              // Remove from local state
+              const currentReplies = commentReplies.get(commentId) || [];
+              setCommentReplies(
+                new Map(commentReplies).set(
+                  commentId,
+                  currentReplies.filter(r => r.id !== replyId)
+                )
+              );
+              
+              refetch();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete reply');
+            }
+          },
+        },
       ]
     );
   };
@@ -398,7 +597,11 @@ export default function FeedScreen() {
     <Card key={post.id} style={styles.postCard}>
       {/* Post Header */}
       <View style={styles.postHeader}>
-        <View style={styles.userInfo}>
+        <TouchableOpacity 
+          style={styles.userInfo}
+          onPress={() => router.push(`/user/${post.user_id}` as any)}
+          activeOpacity={0.7}
+        >
           {post.user?.avatar_url ? (
             <Image source={{ uri: post.user.avatar_url }} style={styles.avatar} />
           ) : (
@@ -414,7 +617,7 @@ export default function FeedScreen() {
               {formatTimeAgo(post.created_at)}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
         {post.user_id === user?.id && (
           <TouchableOpacity onPress={() => handleDeletePost(post.id)} disabled={isDeleting}>
             <Ionicons name="trash-outline" size={20} color="#ff3b30" />
@@ -448,8 +651,15 @@ export default function FeedScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="chatbubble-outline" size={22} color={colors.foreground} />
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => toggleComments(post.id)}
+        >
+          <Ionicons 
+            name={expandedComments.has(post.id) ? 'chatbubble' : 'chatbubble-outline'} 
+            size={22} 
+            color={colors.foreground} 
+          />
           <Text style={[styles.actionText, { color: colors.foreground }]}>
             {post.comments_count || 0}
           </Text>
@@ -459,6 +669,144 @@ export default function FeedScreen() {
           <Ionicons name="share-outline" size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
+
+      {/* Comments Section */}
+      {expandedComments.has(post.id) && (
+        <View style={styles.commentsSection}>
+          {loadingComments.has(post.id) ? (
+            <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+          ) : (
+            <>
+              {/* Comments List */}
+              {(postComments.get(post.id) || []).map((comment) => (
+                <View key={comment.id} style={[styles.commentItem, { borderBottomColor: colors.border }]}>
+                  <TouchableOpacity 
+                    onPress={() => router.push(`/user/${comment.user_id}` as any)}
+                  >
+                    <Text style={[styles.commentAuthor, { color: colors.tint }]}>
+                      {comment.user?.first_name} {comment.user?.last_name}
+                    </Text>
+                  </TouchableOpacity>
+                  <MentionText 
+                    text={comment.content} 
+                    style={[styles.commentText, { color: colors.foreground }]}
+                  />
+                  <View style={styles.commentMeta}>
+                    <Text style={[styles.commentTime, { color: colors.subtext }]}>
+                      {formatTimeAgo(comment.created_at)}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => toggleReplies(comment.id)}
+                      style={{ marginLeft: Spacing.md }}
+                    >
+                      <Text style={[styles.replyButton, { color: colors.tint }]}>
+                        {comment.replies_count || 0} {comment.replies_count === 1 ? 'reply' : 'replies'}
+                      </Text>
+                    </TouchableOpacity>
+                    {comment.user_id === user?.id && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteComment(post.id, comment.id)}
+                        style={{ marginLeft: Spacing.md }}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#ff3b30" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Replies Section */}
+                  {expandedReplies.has(comment.id) && (
+                    <View style={styles.repliesSection}>
+                      {loadingReplies.has(comment.id) ? (
+                        <ActivityIndicator color={colors.tint} size="small" style={{ marginVertical: Spacing.sm }} />
+                      ) : (
+                        <>
+                          {/* Replies List */}
+                          {(commentReplies.get(comment.id) || []).map((reply) => (
+                            <View key={reply.id} style={styles.replyItem}>
+                              <TouchableOpacity 
+                                onPress={() => router.push(`/user/${reply.user_id}` as any)}
+                              >
+                                <Text style={[styles.replyAuthor, { color: colors.tint }]}>
+                                  {reply.user?.first_name} {reply.user?.last_name}
+                                </Text>
+                              </TouchableOpacity>
+                              <MentionText 
+                                text={reply.content} 
+                                style={[styles.replyText, { color: colors.foreground }]}
+                              />
+                              <View style={styles.replyMeta}>
+                                <Text style={[styles.replyTime, { color: colors.subtext }]}>
+                                  {formatTimeAgo(reply.created_at)}
+                                </Text>
+                                {reply.user_id === user?.id && (
+                                  <TouchableOpacity
+                                    onPress={() => handleDeleteReply(comment.id, reply.id)}
+                                    style={{ marginLeft: Spacing.sm }}
+                                  >
+                                    <Ionicons name="trash-outline" size={12} color="#ff3b30" />
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            </View>
+                          ))}
+                          
+                          {/* Add Reply Input */}
+                          <View style={styles.addReplyContainer}>
+                            <MentionTextarea
+                              value={replyText.get(comment.id) || ''}
+                              onChange={(text) => {
+                                const newReplyText = new Map(replyText);
+                                newReplyText.set(comment.id, text);
+                                setReplyText(newReplyText);
+                              }}
+                              placeholder="Add a reply..."
+                            />
+                            <TouchableOpacity
+                              style={[styles.sendReplyButton, { backgroundColor: colors.tint }]}
+                              onPress={() => handleAddReply(comment.id)}
+                              disabled={submittingReply.has(comment.id) || !replyText.get(comment.id)?.trim()}
+                            >
+                              {submittingReply.has(comment.id) ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Ionicons name="send" size={16} color="#fff" />
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))}
+              
+              {/* Add Comment Input */}
+              <View style={styles.addCommentContainer}>
+                <MentionTextarea
+                  value={commentText.get(post.id) || ''}
+                  onChange={(text) => {
+                    const newCommentText = new Map(commentText);
+                    newCommentText.set(post.id, text);
+                    setCommentText(newCommentText);
+                  }}
+                  placeholder="Add a comment..."
+                />
+                <TouchableOpacity
+                  style={[styles.sendCommentButton, { backgroundColor: colors.tint }]}
+                  onPress={() => handleAddComment(post.id)}
+                  disabled={submittingComment.has(post.id) || !commentText.get(post.id)?.trim()}
+                >
+                  {submittingComment.has(post.id) ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="send" size={18} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+      )}
     </Card>
   );
 
@@ -1711,5 +2059,86 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     marginTop: Spacing.xs,
+  },
+  commentsSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+  },
+  commentItem: {
+    marginBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  commentAuthor: {
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: Spacing.xs,
+  },
+  commentText: {
+    fontSize: Typography.fontSizes.sm,
+    marginBottom: Spacing.xs,
+  },
+  commentMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  commentTime: {
+    fontSize: Typography.fontSizes.xs,
+  },
+  addCommentContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  sendCommentButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replyButton: {
+    fontSize: Typography.fontSizes.xs,
+    fontWeight: Typography.fontWeights.semibold,
+  },
+  repliesSection: {
+    marginTop: Spacing.sm,
+    marginLeft: Spacing.lg,
+    paddingLeft: Spacing.md,
+    borderLeftWidth: 2,
+  },
+  replyItem: {
+    marginBottom: Spacing.sm,
+  },
+  replyAuthor: {
+    fontSize: Typography.fontSizes.xs,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: Spacing.xs,
+  },
+  replyText: {
+    fontSize: Typography.fontSizes.xs,
+    marginBottom: Spacing.xs,
+  },
+  replyMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyTime: {
+    fontSize: 10,
+  },
+  addReplyContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  sendReplyButton: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

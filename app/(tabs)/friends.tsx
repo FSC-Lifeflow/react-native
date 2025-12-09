@@ -143,7 +143,11 @@ export default function FriendsScreen() {
 
   const renderFriendItem = (friend: Friend) => (
     <Card key={friend.id} style={styles.friendCard}>
-      <View style={styles.friendContent}>
+      <TouchableOpacity 
+        style={styles.friendContent}
+        onPress={() => router.push(`/user/${friend.id}` as any)}
+        activeOpacity={0.7}
+      >
         <View style={styles.friendInfo}>
           {friend.avatar_url ? (
             <Image source={{ uri: friend.avatar_url }} style={styles.avatar} />
@@ -163,12 +167,15 @@ export default function FriendsScreen() {
         </View>
         <TouchableOpacity
           style={[styles.actionButton, styles.unfriendButton]}
-          onPress={() => handleUnfriend(friend.id, `${friend.first_name} ${friend.last_name}`)}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleUnfriend(friend.id, `${friend.first_name} ${friend.last_name}`);
+          }}
           disabled={isUnfriending}
         >
           <Ionicons name="person-remove" size={20} color="#ff3b30" />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     </Card>
   );
 
@@ -242,7 +249,11 @@ export default function FriendsScreen() {
 
   const renderSearchResult = (user: UserSearchResult) => (
     <Card key={user.id} style={styles.friendCard}>
-      <View style={styles.friendContent}>
+      <TouchableOpacity 
+        style={styles.friendContent}
+        onPress={() => router.push(`/user/${user.id}` as any)}
+        activeOpacity={0.7}
+      >
         <View style={styles.friendInfo}>
           {user.avatar_url ? (
             <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
@@ -262,12 +273,15 @@ export default function FriendsScreen() {
         </View>
         <TouchableOpacity
           style={[styles.actionButton, styles.addButton, { backgroundColor: colors.tint }]}
-          onPress={() => sendRequest(user.id)}
+          onPress={(e) => {
+            e.stopPropagation();
+            sendRequest(user.id);
+          }}
           disabled={isSending}
         >
           <Ionicons name="person-add" size={20} color="#fff" />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     </Card>
   );
 

@@ -35,8 +35,8 @@ export function MentionText({ text, style, mentionColor = '#007AFF', onMentionCl
       if (onMentionClick) {
         onMentionClick(user.id);
       } else {
-        // Otherwise, could navigate to user profile or show info
-        console.log('Mentioned user:', user.id);
+        // Otherwise navigate to user profile
+        router.push(`/user/${user.id}`);
       }
     } catch (error) {
       console.error('Error looking up mentioned user:', error);
