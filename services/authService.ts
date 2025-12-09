@@ -224,6 +224,10 @@ export const authService = {
         throw new Error('OAuth failed');
       }
     } catch (error) {
+      // Don't log error if user cancelled - it's a normal action
+      if (error instanceof Error && error.message === 'OAuth cancelled by user') {
+        throw error; // Re-throw without logging
+      }
       console.error('❌ Google OAuth failed:', error);
       throw error;
     }

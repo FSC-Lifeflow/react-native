@@ -102,6 +102,13 @@ export default function RegisterScreen() {
         setLoading(false);
       }
     } catch (error) {
+      // Don't show error if user cancelled the OAuth flow
+      if (error instanceof Error && error.message === 'OAuth cancelled by user') {
+        console.log('ℹ️ User cancelled Google sign-in');
+        setLoading(false);
+        return;
+      }
+      
       console.error('❌ Google sign-in error:', error);
       Alert.alert(
         'Google Sign In Failed',
