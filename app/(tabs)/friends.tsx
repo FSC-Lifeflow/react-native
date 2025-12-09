@@ -20,6 +20,7 @@ import { Card } from '@/components/ui/Card';
 import { useFriends, useFriendRequests, useUserSearch, useSendFriendRequest } from '@/hooks/useFriends';
 import { Friend, FriendRequest, UserSearchResult } from '@/services/friendService';
 import { useRouter } from 'expo-router';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 
 type TabType = 'friends' | 'requests' | 'search';
 
@@ -48,6 +49,7 @@ export default function FriendsScreen() {
   } = useFriendRequests();
   const { users, isLoading: isSearching } = useUserSearch(searchQuery);
   const { sendRequest, isSending } = useSendFriendRequest();
+  const { unreadCount } = useUnreadMessages();
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -233,6 +235,13 @@ export default function FriendsScreen() {
             onPress={() => router.push('/messages')}
           >
             <Ionicons name="chatbubbles" size={20} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={styles.messageBadge}>
+                <Text style={styles.messageBadgeText}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
         <View style={styles.headerStats}>
@@ -380,6 +389,26 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  messageBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ff3b30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  messageBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   headerStats: {
     flexDirection: 'row',

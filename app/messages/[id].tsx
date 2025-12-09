@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { messageService, Message, ChatRoomWithDetails } from '@/services/messageService';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { MentionText } from '@/components/MentionText';
 
 interface Participant {
   id: string;
@@ -44,6 +45,9 @@ export default function ChatRoomScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionSuggestions, setMentionSuggestions] = useState<Participant[]>([]);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const subscriptionRef = useRef<any>(null);
@@ -166,6 +170,47 @@ export default function ChatRoomScreen() {
     }
   };
 
+  const handleMessageChange = (text: string) => {
+    setNewMessage(text);
+
+    // Check for @ mentions
+    const lastAtIndex = text.lastIndexOf('@');
+    if (lastAtIndex !== -1) {
+      const textAfterAt = text.substring(lastAtIndex + 1);
+      const hasSpaceAfterAt = textAfterAt.includes(' ');
+      
+      if (!hasSpaceAfterAt) {
+        // User is typing a mention
+        setMentionQuery(textAfterAt.toLowerCase());
+        setShowMentionSuggestions(true);
+        
+        // Filter participants based on query
+        const filtered = participants.filter(p => {
+          const username = p.username.toLowerCase();
+          const firstName = p.first_name?.toLowerCase() || '';
+          const lastName = p.last_name?.toLowerCase() || '';
+          const fullName = `${firstName} ${lastName}`.trim().toLowerCase();
+          
+          return username.includes(textAfterAt.toLowerCase()) ||
+                 fullName.includes(textAfterAt.toLowerCase());
+        });
+        setMentionSuggestions(filtered);
+      } else {
+        setShowMentionSuggestions(false);
+      }
+    } else {
+      setShowMentionSuggestions(false);
+    }
+  };
+
+  const handleMentionSelect = (participant: Participant) => {
+    const lastAtIndex = newMessage.lastIndexOf('@');
+    const textBeforeAt = newMessage.substring(0, lastAtIndex);
+    const newText = `${textBeforeAt}@${participant.username} `;
+    setNewMessage(newText);
+    setShowMentionSuggestions(false);
+  };
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !chatRoomId || isSending) return;
 
@@ -186,6 +231,7 @@ export default function ChatRoomScreen() {
       });
       
       setNewMessage('');
+      setShowMentionSuggestions(false);
       scrollToBottom();
     } catch (error: any) {
       console.error('Error sending message:', error);
@@ -251,15 +297,15 @@ export default function ChatRoomScreen() {
               isDeleted && styles.deletedMessage,
             ]}
           >
-            <Text
+            <MentionText
+              text={message.content}
               style={[
                 styles.messageText,
                 { color: isOwnMessage ? '#fff' : colors.foreground },
                 isDeleted && styles.deletedMessageText,
               ]}
-            >
-              {message.content}
-            </Text>
+              mentionColor={isOwnMessage ? '#E3F2FD' : '#007AFF'}
+            />
           </View>
           <Text style={[styles.messageTime, { color: colors.foreground, opacity: 0.5 }]}>
             {formatTimeAgo(message.created_at)}
@@ -334,15 +380,46 @@ export default function ChatRoomScreen() {
         </ScrollView>
       )}
 
+      {/* Mention Suggestions */}
+      {showMentionSuggestions && mentionSuggestions.length > 0 && (
+        <View style={[styles.mentionSuggestions, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {mentionSuggestions.map((participant) => (
+              <TouchableOpacity
+                key={participant.id}
+                style={[styles.mentionSuggestion, { backgroundColor: colors.background }]}
+                onPress={() => handleMentionSelect(participant)}
+              >
+                {participant.avatar_url ? (
+                  <Image source={{ uri: participant.avatar_url }} style={styles.mentionAvatar} />
+                ) : (
+                  <View style={[styles.mentionAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                    <Ionicons name="person" size={12} color={colors.foreground} />
+                  </View>
+                )}
+                <View style={styles.mentionInfo}>
+                  <Text style={[styles.mentionName, { color: colors.foreground }]} numberOfLines={1}>
+                    {participant.first_name || participant.username}
+                  </Text>
+                  <Text style={[styles.mentionUsername, { color: colors.foreground, opacity: 0.6 }]} numberOfLines={1}>
+                    @{participant.username}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Input */}
       <View style={[styles.inputContainer, { backgroundColor: colors.card, paddingBottom: insets.bottom + 8 }]}>
         <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <TextInput
             style={[styles.input, { color: colors.foreground }]}
-            placeholder="Type a message..."
+            placeholder="Type a message... (use @ to mention)"
             placeholderTextColor={colors.foreground + '80'}
             value={newMessage}
-            onChangeText={setNewMessage}
+            onChangeText={handleMessageChange}
             multiline
             maxLength={1000}
           />
@@ -504,5 +581,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: Spacing.sm,
+  },
+  mentionSuggestions: {
+    borderTopWidth: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    maxHeight: 80,
+  },
+  mentionSuggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginRight: Spacing.sm,
+    minWidth: 120,
+  },
+  mentionAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: Spacing.sm,
+  },
+  mentionInfo: {
+    flex: 1,
+  },
+  mentionName: {
+    ...Typography.body,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  mentionUsername: {
+    ...Typography.caption,
+    fontSize: 11,
   },
 });

@@ -6,10 +6,11 @@ import { supabase } from '@/lib/supabase';
 interface MentionTextProps {
   text: string;
   style?: any;
+  mentionColor?: string;
   onMentionClick?: (userId: string) => void;
 }
 
-export function MentionText({ text, style, onMentionClick }: MentionTextProps) {
+export function MentionText({ text, style, mentionColor = '#007AFF', onMentionClick }: MentionTextProps) {
   const router = useRouter();
 
   // Split text into parts: regular text and @mentions
@@ -51,7 +52,7 @@ export function MentionText({ text, style, onMentionClick }: MentionTextProps) {
           return (
             <Text
               key={i}
-              style={styles.mention}
+              style={[styles.mention, { color: mentionColor }]}
               onPress={() => handleMentionClick(username)}
             >
               {part}
