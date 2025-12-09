@@ -1,7 +1,9 @@
+import { EventsSidebar } from '@/components/EventsSidebar';
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useChatHistory } from '@/hooks/useChatHistory';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { chatService } from '@/services/chatService';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -16,6 +18,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Message {
@@ -46,6 +49,17 @@ export default function ChatScreen() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
+  const [showEvents, setShowEvents] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
+  // Google Calendar integration
+  const { events } = useGoogleCalendar();
+
+  // Event selection handler
+  const handleEventSelect = (eventId: string | null) => {
+    setSelectedEventId(eventId);
+    console.log('🎯 Event selected:', eventId);
+  };
 
   // Loading messages that cycle while waiting for AI response
   const loadingMessages = useMemo(
@@ -144,11 +158,25 @@ export default function ChatScreen() {
         });
       }
 
+      // Get selected event data if any
+      const selectedEvent = selectedEventId 
+        ? events.find(event => event.id === selectedEventId) 
+        : undefined;
+
       // Get AI response from webhook
       const webhookResponse = await chatService.sendMessage(
         user.id,
         userMessageContent,
-        conversationId
+        conversationId,
+        selectedEvent ? {
+          id: selectedEvent.id,
+          summary: selectedEvent.summary,
+          description: selectedEvent.description,
+          start: selectedEvent.start,
+          end: selectedEvent.end,
+          location: selectedEvent.location,
+          attendees: selectedEvent.attendees,
+        } : undefined
       );
 
       let aiResponseContent =
@@ -243,14 +271,90 @@ export default function ChatScreen() {
             : [styles.aiBubble, { backgroundColor: colors.muted }],
         ]}
       >
-        <Text
-          style={[
-            styles.messageText,
-            { color: item.isUser ? '#fff' : colors.foreground },
-          ]}
-        >
-          {item.content}
-        </Text>
+        {item.isUser ? (
+          <Text
+            style={[
+              styles.messageText,
+              { color: '#fff' },
+            ]}
+          >
+            {item.content}
+          </Text>
+        ) : (
+          <Markdown
+            style={{
+              body: {
+                color: colors.foreground,
+                fontSize: Typography.fontSizes.sm,
+                lineHeight: 20,
+              },
+              paragraph: {
+                marginTop: 0,
+                marginBottom: 8,
+              },
+              strong: {
+                fontWeight: '600',
+              },
+              em: {
+                fontStyle: 'italic',
+              },
+              bullet_list: {
+                marginVertical: 4,
+              },
+              ordered_list: {
+                marginVertical: 4,
+              },
+              list_item: {
+                marginVertical: 2,
+              },
+              code_inline: {
+                backgroundColor: colors.background,
+                paddingHorizontal: 4,
+                paddingVertical: 2,
+                borderRadius: 4,
+                fontFamily: 'monospace',
+                fontSize: Typography.fontSizes.xs,
+              },
+              fence: {
+                backgroundColor: colors.background,
+                padding: 8,
+                borderRadius: 6,
+                marginVertical: 4,
+              },
+              code_block: {
+                fontFamily: 'monospace',
+                fontSize: Typography.fontSizes.xs,
+              },
+              link: {
+                color: colors.primary,
+              },
+              blockquote: {
+                borderLeftWidth: 3,
+                borderLeftColor: colors.primary,
+                paddingLeft: 8,
+                marginVertical: 4,
+                opacity: 0.8,
+              },
+              heading1: {
+                fontSize: Typography.fontSizes.lg,
+                fontWeight: '700',
+                marginBottom: 8,
+              },
+              heading2: {
+                fontSize: Typography.fontSizes.base,
+                fontWeight: '600',
+                marginBottom: 6,
+              },
+              heading3: {
+                fontSize: Typography.fontSizes.sm,
+                fontWeight: '600',
+                marginBottom: 4,
+              },
+            }}
+          >
+            {item.content}
+          </Markdown>
+        )}
         <Text
           style={[
             styles.timestamp,
@@ -328,12 +432,15 @@ export default function ChatScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: colors.card }]}>
         <TouchableOpacity
           style={styles.headerButton}
-          onPress={() => setShowHistory(!showHistory)}
+          onPress={() => {
+            setShowHistory(!showHistory);
+            if (!showHistory) setShowEvents(false);
+          }}
         >
           <Ionicons
             name={showHistory ? 'chatbubbles' : 'time-outline'}
             size={24}
-            color={colors.foreground}
+            color={showHistory ? colors.primary : colors.foreground}
           />
         </TouchableOpacity>
 
@@ -354,12 +461,33 @@ export default function ChatScreen() {
           </View>
         </View>
 
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => {
+            setShowEvents(!showEvents);
+            if (!showEvents) setShowHistory(false);
+          }}
+        >
+          <Ionicons
+            name={showEvents ? 'chatbubbles' : 'calendar-outline'}
+            size={24}
+            color={showEvents ? colors.primary : colors.foreground}
+          />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.headerButton} onPress={handleNewConversation}>
           <Ionicons name="add-circle-outline" size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
-      {showHistory ? (
+      {showEvents ? (
+        // Events Sidebar View
+        <EventsSidebar
+          onEventSelect={handleEventSelect}
+          selectedEventId={selectedEventId}
+          onClose={() => setShowEvents(false)}
+        />
+      ) : showHistory ? (
         // Conversation History View
         <View style={styles.historyContainer}>
           <Text style={[styles.historyHeader, { color: colors.foreground }]}>
@@ -416,6 +544,19 @@ export default function ChatScreen() {
                     </Text>
                   </TouchableOpacity>
                 ))}
+              </View>
+            )}
+
+            {/* Selected Event Indicator */}
+            {selectedEventId && (
+              <View style={[styles.selectedEventBanner, { backgroundColor: `${colors.primary}15`, borderColor: colors.primary }]}>
+                <Ionicons name="calendar" size={14} color={colors.primary} />
+                <Text style={[styles.selectedEventText, { color: colors.foreground }]} numberOfLines={1}>
+                  {events.find(e => e.id === selectedEventId)?.summary || 'Event selected'}
+                </Text>
+                <TouchableOpacity onPress={() => setSelectedEventId(null)}>
+                  <Ionicons name="close-circle" size={18} color={colors.mutedForeground} />
+                </TouchableOpacity>
               </View>
             )}
 
@@ -667,5 +808,20 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: Spacing['2xl'],
+  },
+  selectedEventBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  selectedEventText: {
+    flex: 1,
+    fontSize: Typography.fontSizes.xs,
+    fontWeight: Typography.fontWeights.medium,
   },
 });
