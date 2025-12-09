@@ -616,8 +616,8 @@ export default function FeedScreen() {
                     setShowSendMotivationModal(true);
                   }}
                 >
-                  <View style={[styles.motivationOptionIcon, { backgroundColor: colors.tint + '20' }]}>
-                    <Ionicons name="send" size={28} color={colors.tint} />
+                  <View style={[styles.motivationOptionIcon, { backgroundColor: '#ff3b30' + '20' }]}>
+                    <Ionicons name="heart" size={28} color="#ff3b30" />
                   </View>
                   <Text style={[styles.motivationOptionTitle, { color: colors.foreground }]}>Send Motivation</Text>
                   <Text style={[styles.motivationOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
@@ -643,38 +643,6 @@ export default function FeedScreen() {
                   <Text style={[styles.motivationOptionTitle, { color: colors.foreground }]}>Request Motivation</Text>
                   <Text style={[styles.motivationOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
                     Ask all your friends to motivate you
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.motivationOptionCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => {
-                    setShowMotivationMenuModal(false);
-                    handleOpenScheduledWorkoutModal();
-                  }}
-                >
-                  <View style={[styles.motivationOptionIcon, { backgroundColor: '#34c759' + '20' }]}>
-                    <Ionicons name="calendar" size={28} color="#34c759" />
-                  </View>
-                  <Text style={[styles.motivationOptionTitle, { color: colors.foreground }]}>Invite to Workout</Text>
-                  <Text style={[styles.motivationOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
-                    Invite friends to your scheduled workout
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.motivationOptionCard, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => {
-                    setShowMotivationMenuModal(false);
-                    setShowChallengeModal(true);
-                  }}
-                >
-                  <View style={[styles.motivationOptionIcon, { backgroundColor: '#ff3b30' + '20' }]}>
-                    <Ionicons name="flash" size={28} color="#ff3b30" />
-                  </View>
-                  <Text style={[styles.motivationOptionTitle, { color: colors.foreground }]}>Challenge Friend</Text>
-                  <Text style={[styles.motivationOptionDesc, { color: colors.foreground, opacity: 0.6 }]}>
-                    Challenge friends to a workout competition
                   </Text>
                 </TouchableOpacity>
               </View>

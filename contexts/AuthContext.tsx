@@ -34,7 +34,7 @@ type AuthContextType = {
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void | { pending: boolean }>;
+  loginWithGoogle: () => Promise<{ url: string; provider: string } | void>;
   register: (userData: {
     username: string;
     firstName: string;
@@ -161,29 +161,67 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   /**
    * Login using Google OAuth
+   * Opens browser for OAuth flow, then processes the callback
    */
   const loginWithGoogle = async () => {
     setLoading(true);
     setError(null);
     try {
+      console.log('🔐 AuthContext: Initiating Google OAuth...');
       const result = await authService.loginWithGoogle();
       
-      // If pending, OAuth is in progress via browser
-      if (result && 'pending' in result) {
-        return result;
+      console.log('🔐 AuthContext: OAuth result received:', result);
+      
+      // If we got a URL back with tokens, process it
+      if (result && result.url) {
+        console.log('🔐 Processing OAuth callback URL...');
+        
+        // Parse the URL to extract tokens
+        const url = new URL(result.url);
+        const params = new URLSearchParams(url.hash.substring(1)); // Remove # and parse
+        
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        
+        if (accessToken && refreshToken) {
+          console.log('✅ Tokens extracted, setting session...');
+          
+          // Set the session in Supabase
+          const { data, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (sessionError) {
+            throw new Error(sessionError.message);
+          }
+
+          // Save session to AsyncStorage
+          await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }));
+
+          // Fetch user profile
+          const currentUser = await authService.getCurrentUser();
+          console.log('✅ User profile fetched:', currentUser?.email);
+          setUser(currentUser);
+          setLoading(false);
+          
+          return result;
+        } else {
+          throw new Error('No tokens found in OAuth callback');
+        }
       }
       
-      // Otherwise, we have user data
-      if (result && 'user' in result) {
-        setUser(result.user);
-      }
+      setLoading(false);
+      return result;
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Google login failed';
       setError(errorMessage);
-      throw new Error(errorMessage);
-    } finally {
       setLoading(false);
+      throw new Error(errorMessage);
     }
   };
 

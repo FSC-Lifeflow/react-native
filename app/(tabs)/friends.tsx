@@ -19,6 +19,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Card } from '@/components/ui/Card';
 import { useFriends, useFriendRequests, useUserSearch, useSendFriendRequest } from '@/hooks/useFriends';
 import { Friend, FriendRequest, UserSearchResult } from '@/services/friendService';
+import { useRouter } from 'expo-router';
 
 type TabType = 'friends' | 'requests' | 'search';
 
@@ -26,6 +27,7 @@ export default function FriendsScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('friends');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -224,7 +226,15 @@ export default function FriendsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.card, paddingTop: insets.top + 16 }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Friends</Text>
+        <View style={styles.headerTop}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Friends</Text>
+          <TouchableOpacity
+            style={[styles.messageButton, { backgroundColor: colors.tint }]}
+            onPress={() => router.push('/messages')}
+          >
+            <Ionicons name="chatbubbles" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
         <View style={styles.headerStats}>
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: colors.tint }]}>{friendCount}</Text>
@@ -355,9 +365,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
   headerTitle: {
     ...Typography.h1,
-    marginBottom: Spacing.sm,
+  },
+  messageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerStats: {
     flexDirection: 'row',

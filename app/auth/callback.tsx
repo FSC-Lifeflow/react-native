@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { useRouter, useLocalSearchParams, useSegments } from 'expo-router';
+import { View, ActivityIndicator, StyleSheet, Text, Alert } from 'react-native';
+import { useRouter, useLocalSearchParams, useGlobalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from '@/services/authService';
+import * as Linking from 'expo-linking';
+
+const SESSION_KEY = 'lifeflow_session';
 
 /**
  * OAuth Callback Handler
@@ -10,7 +15,6 @@ import { supabase } from '@/lib/supabase';
  */
 export default function AuthCallback() {
   const router = useRouter();
-  const segments = useSegments();
   const params = useLocalSearchParams();
   const [isProcessing, setIsProcessing] = useState(true);
   const [hasProcessed, setHasProcessed] = useState(false);
@@ -42,6 +46,7 @@ export default function AuthCallback() {
     
     try {
       console.log('🔄 Processing OAuth callback...');
+      console.log('📦 Callback params:', params);
 
       // On web, Supabase puts tokens in the hash fragment
       // They come as params['#'] = 'access_token=...&refresh_token=...'
@@ -61,19 +66,16 @@ export default function AuthCallback() {
 
       if (error) {
         console.error('❌ OAuth error:', error, errorDescription);
-        alert(`Authentication failed: ${errorDescription || error}`);
+        Alert.alert('Authentication Failed', errorDescription || error);
         setIsProcessing(false);
         setTimeout(() => router.replace('/(auth)/sign-in'), 100);
         return;
       }
 
       if (accessToken && refreshToken) {
-        // Navigate FIRST, then set the session
-        // This prevents the auth state change from unmounting this component
-        setIsProcessing(false);
-        router.replace('/(tabs)/dashboard');
+        console.log('✅ Tokens received, setting session...');
         
-        // Now set the session in Supabase
+        // Set the session in Supabase
         const { data, error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -81,18 +83,54 @@ export default function AuthCallback() {
 
         if (sessionError) {
           console.error('❌ Session error:', sessionError);
-        } else {
-          console.log('✅ OAuth login successful:', data.user?.email);
+          Alert.alert('Authentication Failed', 'Failed to establish session. Please try again.');
+          setIsProcessing(false);
+          setTimeout(() => router.replace('/(auth)/sign-in'), 100);
+          return;
+        }
+
+        console.log('✅ Session set, user:', data.user?.email);
+
+        // Save session to AsyncStorage for persistence
+        await AsyncStorage.setItem(SESSION_KEY, JSON.stringify({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        }));
+
+        // Handle OAuth callback to create/fetch user profile
+        try {
+          const { user } = await authService.handleOAuthCallback();
+          console.log('✅ User profile retrieved:', user.email);
+          
+          // Check if profile is complete
+          const isProfileComplete = user.username && user.first_name && user.last_name;
+          
+          setIsProcessing(false);
+          
+          if (isProfileComplete) {
+            // Navigate to dashboard
+            router.replace('/(tabs)/dashboard');
+          } else {
+            // Navigate to complete profile (if you have this route)
+            // For now, just go to dashboard
+            router.replace('/(tabs)/dashboard');
+          }
+        } catch (profileError) {
+          console.error('❌ Profile fetch error:', profileError);
+          // Still navigate to dashboard even if profile fetch fails
+          setIsProcessing(false);
+          router.replace('/(tabs)/dashboard');
         }
       } else {
         console.error('❌ No tokens found in callback URL');
-        alert('Authentication failed. Please try again.');
+        console.log('Available params:', Object.keys(params));
+        Alert.alert('Authentication Failed', 'No authentication tokens received. Please try again.');
         setIsProcessing(false);
         setTimeout(() => router.replace('/(auth)/sign-in'), 100);
       }
     } catch (error) {
       console.error('❌ Callback error:', error);
-      alert('An error occurred during authentication.');
+      Alert.alert('Error', 'An error occurred during authentication.');
       setIsProcessing(false);
       setTimeout(() => router.replace('/(auth)/sign-in'), 100);
     }
