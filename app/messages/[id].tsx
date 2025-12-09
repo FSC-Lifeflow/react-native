@@ -48,10 +48,13 @@ export default function ChatRoomScreen() {
   const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionSuggestions, setMentionSuggestions] = useState<Participant[]>([]);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const subscriptionRef = useRef<any>(null);
   const reactionSubscriptionRef = useRef<any>(null);
+
+  const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
   useEffect(() => {
     if (chatRoomId) {
@@ -241,6 +244,16 @@ export default function ChatRoomScreen() {
     }
   };
 
+  const handleReaction = async (messageId: string, emoji: string) => {
+    try {
+      await messageService.addReaction(messageId, emoji);
+      setShowReactionPicker(null);
+    } catch (error: any) {
+      console.error('Error adding reaction:', error);
+      Alert.alert('Error', 'Failed to add reaction');
+    }
+  };
+
   const scrollToBottom = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -288,25 +301,82 @@ export default function ChatRoomScreen() {
               {message.sender?.first_name || message.sender?.username}
             </Text>
           )}
-          <View
-            style={[
-              styles.messageBubble,
-              isOwnMessage
-                ? { backgroundColor: colors.tint }
-                : { backgroundColor: colors.card },
-              isDeleted && styles.deletedMessage,
-            ]}
+          <TouchableOpacity
+            onLongPress={() => !isDeleted && setShowReactionPicker(message.id)}
+            activeOpacity={0.9}
           >
-            <MentionText
-              text={message.content}
+            <View
               style={[
-                styles.messageText,
-                { color: isOwnMessage ? '#fff' : colors.foreground },
-                isDeleted && styles.deletedMessageText,
+                styles.messageBubble,
+                isOwnMessage
+                  ? { backgroundColor: colors.tint }
+                  : { backgroundColor: colors.card },
+                isDeleted && styles.deletedMessage,
               ]}
-              mentionColor={isOwnMessage ? '#E3F2FD' : '#007AFF'}
-            />
-          </View>
+            >
+              <MentionText
+                text={message.content}
+                style={[
+                  styles.messageText,
+                  { color: isOwnMessage ? '#fff' : colors.foreground },
+                  isDeleted && styles.deletedMessageText,
+                ]}
+                mentionColor={isOwnMessage ? '#E3F2FD' : '#007AFF'}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Reactions */}
+          {((message.reactions && message.reactions.length > 0) || !isDeleted) && (
+            <View style={styles.reactionsContainer}>
+              {message.reactions?.map((reaction, index) => (
+                <TouchableOpacity
+                  key={`${message.id}-${reaction.emoji}-${index}`}
+                  style={[
+                    styles.reactionBubble,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    reaction.hasReacted && { backgroundColor: colors.tint + '20', borderColor: colors.tint },
+                  ]}
+                  onPress={() => handleReaction(message.id, reaction.emoji)}
+                >
+                  <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+                  <Text style={[styles.reactionCount, { color: reaction.hasReacted ? colors.tint : colors.foreground }]}>
+                    {reaction.count}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {!isDeleted && (
+                <TouchableOpacity
+                  style={[styles.reactionBubble, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setShowReactionPicker(message.id)}
+                >
+                  <Ionicons name="add" size={14} color={colors.foreground} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Reaction Picker */}
+          {showReactionPicker === message.id && (
+            <View style={[styles.reactionPicker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {COMMON_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={styles.reactionPickerEmoji}
+                  onPress={() => handleReaction(message.id, emoji)}
+                >
+                  <Text style={styles.reactionPickerEmojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.reactionPickerClose}
+                onPress={() => setShowReactionPicker(null)}
+              >
+                <Ionicons name="close" size={16} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <Text style={[styles.messageTime, { color: colors.foreground, opacity: 0.5 }]}>
             {formatTimeAgo(message.created_at)}
             {message.updated_at !== message.created_at && !isDeleted && ' (edited)'}
@@ -614,5 +684,52 @@ const styles = StyleSheet.create({
   mentionUsername: {
     ...Typography.caption,
     fontSize: 11,
+  },
+  reactionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: Spacing.xs,
+    gap: Spacing.xs,
+  },
+  reactionBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    gap: 4,
+  },
+  reactionEmoji: {
+    fontSize: 14,
+  },
+  reactionCount: {
+    ...Typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  reactionPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.xs,
+    gap: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reactionPickerEmoji: {
+    padding: Spacing.xs,
+  },
+  reactionPickerEmojiText: {
+    fontSize: 24,
+  },
+  reactionPickerClose: {
+    padding: Spacing.xs,
+    marginLeft: 'auto',
   },
 });
