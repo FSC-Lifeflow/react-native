@@ -1,23 +1,24 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuth } from '@/contexts/AuthContext';
-import { authService } from '@/services/authService';
 import { Card } from '@/components/ui/Card';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { authService } from '@/services/authService';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const { user, refreshUser } = useAuth();
@@ -31,6 +32,70 @@ export default function ProfileScreen() {
     last_name: user?.last_name || '',
     username: user?.username || '',
   });
+  
+  // Fitness preferences state
+  const [fitnessPreferences, setFitnessPreferences] = useState({
+    fitness_level: '',
+    primary_goals: '',
+    exercise_preferences: '',
+    weekly_frequency: '',
+    session_duration: '',
+    equipment_access: '',
+    physical_limitations: '',
+  });
+  const [showPicker, setShowPicker] = useState<string | null>(null);
+  
+  // Stats state
+  const [stats, setStats] = useState({
+    friends: 0,
+    workouts: 0,
+  });
+
+  // Fetch user fitness preferences and stats on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.id) return;
+      
+      try {
+        // Fetch fitness preferences
+        const userData = await authService.getCurrentUser();
+        if (userData) {
+          setFitnessPreferences({
+            fitness_level: userData.fitness_level || '',
+            primary_goals: userData.primary_goals || '',
+            exercise_preferences: userData.exercise_preferences || '',
+            weekly_frequency: userData.weekly_frequency || '',
+            session_duration: userData.session_duration || '',
+            equipment_access: userData.equipment_access || '',
+            physical_limitations: userData.physical_limitations || '',
+          });
+        }
+
+        // Fetch friends count
+        try {
+          const friends = await friendService.getFriends();
+          setStats(prev => ({ ...prev, friends: friends.length }));
+        } catch (error) {
+          console.error('Failed to fetch friends:', error);
+        }
+
+        // Fetch workouts count from Fitbit
+        try {
+          const activities = await fitbitService.getActivities();
+          if (activities?.summary?.activityCalories) {
+            // Count activities that burned calories (indicating a workout)
+            setStats(prev => ({ ...prev, workouts: activities.summary.activityCalories > 0 ? 1 : 0 }));
+          }
+        } catch (error) {
+          console.error('Failed to fetch workouts:', error);
+        }
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+      }
+    };
+
+    fetchData();
+  }, [user?.id]);
 
   const pickImage = async () => {
     try {
@@ -82,10 +147,66 @@ export default function ProfileScreen() {
     setIsEditing(false);
   };
 
-  const stats = [
-    { label: 'Workouts', value: '24', icon: 'fitness' },
-    { label: 'Streak', value: '7 days', icon: 'flame' },
-    { label: 'Friends', value: '12', icon: 'people' },
+  const handleSaveFitnessPreferences = async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      await authService.updateUserProfile(user?.id, fitnessPreferences);
+      await refreshUser();
+      Alert.alert('Success', 'Fitness preferences updated successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update fitness preferences');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fitnessOptions = {
+    fitness_level: [
+      { label: 'Beginner', value: 'beginner' },
+      { label: 'Intermediate', value: 'intermediate' },
+      { label: 'Advanced', value: 'advanced' },
+    ],
+    primary_goals: [
+      { label: 'Weight Loss', value: 'weight-loss' },
+      { label: 'Muscle Gain', value: 'muscle-gain' },
+      { label: 'Endurance', value: 'endurance' },
+      { label: 'Flexibility', value: 'flexibility' },
+      { label: 'General Health', value: 'general-health' },
+    ],
+    exercise_preferences: [
+      { label: 'Strength Training', value: 'strength-training' },
+      { label: 'Cardio', value: 'cardio' },
+      { label: 'Yoga', value: 'yoga' },
+      { label: 'Pilates', value: 'pilates' },
+      { label: 'HIIT', value: 'hiit' },
+      { label: 'Sports', value: 'sports' },
+      { label: 'Outdoor Activities', value: 'outdoor' },
+      { label: 'Strength + Cardio', value: 'strength-cardio' },
+    ],
+    weekly_frequency: [
+      { label: '2-3 days', value: '2-3-days' },
+      { label: '4-5 days', value: '4-5-days' },
+      { label: '6-7 days', value: '6-7-days' },
+    ],
+    session_duration: [
+      { label: '15-30 min', value: '15-30-min' },
+      { label: '30-45 min', value: '30-45-min' },
+      { label: '45-60 min', value: '45-60-min' },
+      { label: '60+ min', value: '60-plus-min' },
+    ],
+    equipment_access: [
+      { label: 'Home (bodyweight)', value: 'home-bodyweight' },
+      { label: 'Home (basic equipment)', value: 'home-basic' },
+      { label: 'Full gym', value: 'full-gym' },
+      { label: 'Outdoor spaces', value: 'outdoor' },
+    ],
+  };
+
+  const statsDisplay = [
+    { label: 'Workouts', value: stats.workouts.toString(), icon: 'fitness' },
+    { label: 'Friends', value: stats.friends.toString(), icon: 'people' },
   ];
 
   return (
@@ -176,11 +297,11 @@ export default function ProfileScreen() {
 
         {!isEditing ? (
           <TouchableOpacity
-            style={[styles.editButton, { backgroundColor: colors.primary + '10' }]}
+            style={[styles.editButton, { backgroundColor: colors.primary }]}
             onPress={() => setIsEditing(true)}
           >
-            <Ionicons name="create-outline" size={20} color={colors.primary} />
-            <Text style={[styles.editButtonText, { color: colors.primary }]}>Edit Profile</Text>
+            <Ionicons name="create-outline" size={20} color="#fff" />
+            <Text style={[styles.editButtonText, { color: '#fff' }]}>Edit Profile</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.editActions}>
@@ -208,7 +329,7 @@ export default function ProfileScreen() {
 
       {/* Stats */}
       <View style={styles.statsContainer}>
-        {stats.map((stat, index) => (
+        {statsDisplay.map((stat, index) => (
           <Card key={index} style={styles.statCard}>
             <Ionicons name={stat.icon as any} size={24} color={colors.primary} />
             <Text style={[styles.statValue, { color: colors.foreground }]}>{stat.value}</Text>
@@ -217,57 +338,194 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      {/* Fitness Goals */}
+      {/* Fitness Preferences */}
       <Card style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Fitness Goals</Text>
-          <TouchableOpacity>
-            <Ionicons name="create-outline" size={20} color={colors.primary} />
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Fitness Preferences</Text>
+        </View>
+
+        {/* Fitness Level */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Fitness Level</Text>
+          <TouchableOpacity
+            style={[styles.preferenceSelector, { borderColor: colors.border, backgroundColor: colors.muted }]}
+            onPress={() => setShowPicker('fitness_level')}
+          >
+            <Text style={[styles.preferenceSelectorText, { color: fitnessPreferences.fitness_level ? colors.foreground : colors.mutedForeground }]}>
+              {fitnessPreferences.fitness_level 
+                ? fitnessOptions.fitness_level.find(o => o.value === fitnessPreferences.fitness_level)?.label 
+                : 'Select fitness level'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
-        <View style={[styles.goalItem, { borderBottomColor: colors.border }]}>
-          <Ionicons name="trophy-outline" size={20} color={colors.mutedForeground} />
-          <Text style={[styles.goalText, { color: colors.foreground }]}>Complete 5 workouts per week</Text>
+
+        {/* Primary Goals */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Primary Goals</Text>
+          <TouchableOpacity
+            style={[styles.preferenceSelector, { borderColor: colors.border, backgroundColor: colors.muted }]}
+            onPress={() => setShowPicker('primary_goals')}
+          >
+            <Text style={[styles.preferenceSelectorText, { color: fitnessPreferences.primary_goals ? colors.foreground : colors.mutedForeground }]}>
+              {fitnessPreferences.primary_goals 
+                ? fitnessOptions.primary_goals.find(o => o.value === fitnessPreferences.primary_goals)?.label 
+                : 'Select primary goals'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
         </View>
-        <View style={[styles.goalItem, { borderBottomColor: colors.border }]}>
-          <Ionicons name="footsteps-outline" size={20} color={colors.mutedForeground} />
-          <Text style={[styles.goalText, { color: colors.foreground }]}>Walk 10,000 steps daily</Text>
+
+        {/* Exercise Preferences */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Exercise Preferences</Text>
+          <TouchableOpacity
+            style={[styles.preferenceSelector, { borderColor: colors.border, backgroundColor: colors.muted }]}
+            onPress={() => setShowPicker('exercise_preferences')}
+          >
+            <Text style={[styles.preferenceSelectorText, { color: fitnessPreferences.exercise_preferences ? colors.foreground : colors.mutedForeground }]}>
+              {fitnessPreferences.exercise_preferences 
+                ? fitnessOptions.exercise_preferences.find(o => o.value === fitnessPreferences.exercise_preferences)?.label 
+                : 'Select exercise preferences'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
         </View>
-        <View style={[styles.goalItem, { borderBottomColor: colors.border }]}>
-          <Ionicons name="moon-outline" size={20} color={colors.mutedForeground} />
-          <Text style={[styles.goalText, { color: colors.foreground }]}>Get 8 hours of sleep</Text>
+
+        {/* Weekly Frequency */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Weekly Frequency</Text>
+          <TouchableOpacity
+            style={[styles.preferenceSelector, { borderColor: colors.border, backgroundColor: colors.muted }]}
+            onPress={() => setShowPicker('weekly_frequency')}
+          >
+            <Text style={[styles.preferenceSelectorText, { color: fitnessPreferences.weekly_frequency ? colors.foreground : colors.mutedForeground }]}>
+              {fitnessPreferences.weekly_frequency 
+                ? fitnessOptions.weekly_frequency.find(o => o.value === fitnessPreferences.weekly_frequency)?.label 
+                : 'Select weekly frequency'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
         </View>
+
+        {/* Session Duration */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Session Duration</Text>
+          <TouchableOpacity
+            style={[styles.preferenceSelector, { borderColor: colors.border, backgroundColor: colors.muted }]}
+            onPress={() => setShowPicker('session_duration')}
+          >
+            <Text style={[styles.preferenceSelectorText, { color: fitnessPreferences.session_duration ? colors.foreground : colors.mutedForeground }]}>
+              {fitnessPreferences.session_duration 
+                ? fitnessOptions.session_duration.find(o => o.value === fitnessPreferences.session_duration)?.label 
+                : 'Select session duration'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Equipment Access */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Equipment Access</Text>
+          <TouchableOpacity
+            style={[styles.preferenceSelector, { borderColor: colors.border, backgroundColor: colors.muted }]}
+            onPress={() => setShowPicker('equipment_access')}
+          >
+            <Text style={[styles.preferenceSelectorText, { color: fitnessPreferences.equipment_access ? colors.foreground : colors.mutedForeground }]}>
+              {fitnessPreferences.equipment_access 
+                ? fitnessOptions.equipment_access.find(o => o.value === fitnessPreferences.equipment_access)?.label 
+                : 'Select equipment access'}
+            </Text>
+            <Ionicons name="chevron-down" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Physical Limitations */}
+        <View style={styles.preferenceItem}>
+          <Text style={[styles.preferenceLabel, { color: colors.foreground }]}>Physical Limitations</Text>
+          <TextInput
+            style={[styles.limitationsInput, { 
+              borderColor: colors.border, 
+              backgroundColor: colors.muted,
+              color: colors.foreground 
+            }]}
+            placeholderTextColor={colors.mutedForeground}
+            value={fitnessPreferences.physical_limitations}
+            onChangeText={(text) => setFitnessPreferences({ ...fitnessPreferences, physical_limitations: text })}
+            placeholder="Describe any physical limitations..."
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={[styles.saveButton, { backgroundColor: colors.primary }]}
+          onPress={handleSaveFitnessPreferences}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="save-outline" size={20} color="#fff" />
+              <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Save Preferences</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </Card>
 
-      {/* Activity History */}
-      <Card style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Activity</Text>
-          <TouchableOpacity>
-            <Text style={[styles.viewAll, { color: colors.primary }]}>View All</Text>
-          </TouchableOpacity>
+      {/* Picker Modal */}
+      <Modal
+        visible={showPicker !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPicker(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                Select {showPicker?.replace(/_/g, ' ')}
+              </Text>
+              <TouchableOpacity onPress={() => setShowPicker(null)}>
+                <Ionicons name="close" size={24} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.optionsList}>
+              {showPicker && fitnessOptions[showPicker as keyof typeof fitnessOptions]?.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.optionItem,
+                    { borderBottomColor: colors.border },
+                    fitnessPreferences[showPicker as keyof typeof fitnessPreferences] === option.value && 
+                    { backgroundColor: colors.primary + '10' }
+                  ]}
+                  onPress={() => {
+                    setFitnessPreferences({ ...fitnessPreferences, [showPicker]: option.value });
+                    setShowPicker(null);
+                  }}
+                >
+                  <Text style={[
+                    styles.optionText,
+                    { color: colors.foreground },
+                    fitnessPreferences[showPicker as keyof typeof fitnessPreferences] === option.value && 
+                    { fontWeight: '600', color: colors.primary }
+                  ]}>
+                    {option.label}
+                  </Text>
+                  {fitnessPreferences[showPicker as keyof typeof fitnessPreferences] === option.value && (
+                    <Ionicons name="checkmark" size={20} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         </View>
-        <View style={[styles.activityItem, { borderBottomColor: colors.border }]}>
-          <View style={[styles.activityIcon, { backgroundColor: colors.muted }]}>
-            <Ionicons name="fitness" size={20} color={colors.primary} />
-          </View>
-          <View style={styles.activityInfo}>
-            <Text style={[styles.activityTitle, { color: colors.foreground }]}>Morning Cardio</Text>
-            <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>Today at 7:00 AM • 45 min</Text>
-          </View>
-          <Text style={[styles.activityCalories, { color: colors.secondary }]}>320 cal</Text>
-        </View>
-        <View style={[styles.activityItem, { borderBottomColor: colors.border }]}>
-          <View style={[styles.activityIcon, { backgroundColor: colors.muted }]}>
-            <Ionicons name="walk" size={20} color={colors.primary} />
-          </View>
-          <View style={styles.activityInfo}>
-            <Text style={[styles.activityTitle, { color: colors.foreground }]}>Evening Walk</Text>
-            <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>Yesterday at 6:30 PM • 30 min</Text>
-          </View>
-          <Text style={[styles.activityCalories, { color: colors.secondary }]}>150 cal</Text>
-        </View>
-      </Card>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -421,43 +679,81 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.sm,
     fontWeight: Typography.fontWeights.semibold,
   },
-  goalItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
+  preferenceItem: {
+    marginBottom: Spacing.lg,
   },
-  goalText: {
+  preferenceLabel: {
     fontSize: Typography.fontSizes.sm,
-    marginLeft: Spacing.md,
+    fontWeight: Typography.fontWeights.semibold,
+    marginBottom: Spacing.sm,
   },
-  activityItem: {
+  preferenceSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
   },
-  activityIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.md,
-  },
-  activityInfo: {
+  preferenceSelectorText: {
+    fontSize: Typography.fontSizes.base,
     flex: 1,
   },
-  activityTitle: {
-    fontSize: Typography.fontSizes.sm,
-    fontWeight: Typography.fontWeights.semibold,
-    marginBottom: 2,
+  limitationsInput: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: Typography.fontSizes.base,
+    minHeight: 80,
   },
-  activityTime: {
-    fontSize: Typography.fontSizes.xs,
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.lg,
   },
-  activityCalories: {
-    fontSize: Typography.fontSizes.sm,
+  saveButtonText: {
+    fontSize: Typography.fontSizes.base,
     fontWeight: Typography.fontWeights.semibold,
+    marginLeft: Spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: Typography.fontSizes.lg,
+    fontWeight: Typography.fontWeights.semibold,
+    textTransform: 'capitalize',
+  },
+  optionsList: {
+    padding: Spacing.lg,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  optionText: {
+    fontSize: Typography.fontSizes.base,
+    flex: 1,
   },
 });

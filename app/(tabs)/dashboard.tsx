@@ -1,36 +1,37 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  RefreshControl,
-  Platform,
-  ActivityIndicator,
-  Modal,
-  FlatList,
-  Alert,
-  TextInput,
-  KeyboardAvoidingView,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GoogleCalendar } from '@/components/GoogleCalendar';
+import { Card } from '@/components/ui/Card';
+import { StatCard } from '@/components/ui/StatCard';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { useFitbit } from '@/hooks/useFitbit';
-import { notificationService, Notification } from '@/services/notificationService';
-import { StatCard } from '@/components/ui/StatCard';
-import { Card } from '@/components/ui/Card';
-import { GoogleCalendar } from '@/components/GoogleCalendar';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { router } from 'expo-router';
-import { googleCalendarService, CalendarEvent } from '@/services/googleCalendarService';
-import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
+import { useFitbit } from '@/hooks/useFitbit';
 import { useFriends } from '@/hooks/useFriends';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { Friend } from '@/services/friendService';
-import { Image } from 'react-native';
+import { CalendarEvent, googleCalendarService } from '@/services/googleCalendarService';
+import { Notification, notificationService } from '@/services/notificationService';
+import { workoutService } from '@/services/workoutService';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -69,6 +70,14 @@ export default function DashboardScreen() {
   const [selectedChallengeFriends, setSelectedChallengeFriends] = useState<Friend[]>([]);
   const [isSendingChallenges, setIsSendingChallenges] = useState(false);
   
+  // Manual workout logging states
+  const [showWorkoutModal, setShowWorkoutModal] = useState(false);
+  const [workoutType, setWorkoutType] = useState('');
+  const [workoutDuration, setWorkoutDuration] = useState('');
+  const [workoutSatisfaction, setWorkoutSatisfaction] = useState('3');
+  const [workoutNotes, setWorkoutNotes] = useState('');
+  const [isSavingWorkout, setIsSavingWorkout] = useState(false);
+  
   const { friends } = useFriends();
   const { isAuthenticated: isCalendarConnected } = useGoogleCalendar();
 
@@ -86,23 +95,6 @@ export default function DashboardScreen() {
     activeGoal: 45,
     heartRate: data.heartRate?.restingHeartRate || 0,
   };
-
-  const upcomingWorkouts = [
-    {
-      id: 1,
-      time: '6:00 PM',
-      title: 'Evening Yoga Flow',
-      duration: '30 min',
-      type: 'yoga',
-    },
-    {
-      id: 2,
-      time: 'Tomorrow 7:00 AM',
-      title: 'Morning Cardio',
-      duration: '45 min',
-      type: 'cardio',
-    },
-  ];
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -345,6 +337,49 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleSaveWorkout = async () => {
+    if (!workoutType) {
+      Alert.alert('Missing Information', 'Please select a workout type.');
+      return;
+    }
+
+    if (!workoutDuration || Number(workoutDuration) <= 0) {
+      Alert.alert('Missing Information', 'Please enter a valid duration.');
+      return;
+    }
+
+    setIsSavingWorkout(true);
+    try {
+      if (!user?.id) throw new Error('Not authenticated');
+
+      await workoutService.addWorkout({
+        user_id: user.id,
+        started_at: new Date().toISOString(),
+        type: workoutType,
+        duration_minutes: Number(workoutDuration),
+        satisfaction: workoutSatisfaction ? Number(workoutSatisfaction) : null,
+        notes: workoutNotes || null,
+        source: 'manual',
+      });
+
+      Alert.alert('Success', 'Workout logged successfully!');
+      
+      setShowWorkoutModal(false);
+      setWorkoutType('');
+      setWorkoutDuration('');
+      setWorkoutSatisfaction('3');
+      setWorkoutNotes('');
+      
+      // Refresh data
+      await refresh();
+    } catch (error: any) {
+      console.error('❌ Error saving workout:', error);
+      Alert.alert('Error', error.message || 'Failed to save workout. Please try again.');
+    } finally {
+      setIsSavingWorkout(false);
+    }
+  };
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -419,49 +454,51 @@ export default function DashboardScreen() {
         </Card>
       )}
 
-      {/* Today's Progress */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Today's Progress</Text>
-        
-        <View style={styles.statsGrid}>
-          <StatCard
-            icon={<Ionicons name="footsteps" size={20} color={colors.primary} />}
-            title="Steps"
-            value={todayStats.steps.toLocaleString()}
-            subtitle={`Goal: ${todayStats.stepGoal.toLocaleString()}`}
-            progress={(todayStats.steps / todayStats.stepGoal) * 100}
-            color={colors.primary}
-          />
+      {/* Today's Progress - Only show when Fitbit is connected */}
+      {isConnected && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Today's Progress</Text>
           
-          <StatCard
-            icon={<Ionicons name="flame" size={20} color={colors.secondary} />}
-            title="Calories"
-            value={todayStats.calories}
-            subtitle={`Goal: ${todayStats.calorieGoal}`}
-            progress={(todayStats.calories / todayStats.calorieGoal) * 100}
-            color={colors.secondary}
-          />
-        </View>
+          <View style={styles.statsGrid}>
+            <StatCard
+              icon={<Ionicons name="footsteps" size={20} color={colors.primary} />}
+              title="Steps"
+              value={todayStats.steps.toLocaleString()}
+              subtitle={`Goal: ${todayStats.stepGoal.toLocaleString()}`}
+              progress={(todayStats.steps / todayStats.stepGoal) * 100}
+              color={colors.primary}
+            />
+            
+            <StatCard
+              icon={<Ionicons name="flame" size={20} color={colors.secondary} />}
+              title="Calories"
+              value={todayStats.calories}
+              subtitle={`Goal: ${todayStats.calorieGoal}`}
+              progress={(todayStats.calories / todayStats.calorieGoal) * 100}
+              color={colors.secondary}
+            />
+          </View>
 
-        <View style={styles.statsGrid}>
-          <StatCard
-            icon={<Ionicons name="time" size={20} color={colors.primary} />}
-            title="Active Minutes"
-            value={todayStats.activeMinutes}
-            subtitle={`Goal: ${todayStats.activeGoal} min`}
-            progress={(todayStats.activeMinutes / todayStats.activeGoal) * 100}
-            color={colors.primary}
-          />
-          
-          <StatCard
-            icon={<Ionicons name="heart" size={20} color={colors.accent} />}
-            title="Heart Rate"
-            value={`${todayStats.heartRate} bpm`}
-            subtitle="Resting"
-            color={colors.accent}
-          />
+          <View style={styles.statsGrid}>
+            <StatCard
+              icon={<Ionicons name="time" size={20} color={colors.primary} />}
+              title="Active Minutes"
+              value={todayStats.activeMinutes}
+              subtitle={`Goal: ${todayStats.activeGoal} min`}
+              progress={(todayStats.activeMinutes / todayStats.activeGoal) * 100}
+              color={colors.primary}
+            />
+            
+            <StatCard
+              icon={<Ionicons name="heart" size={20} color={colors.accent} />}
+              title="Heart Rate"
+              value={`${todayStats.heartRate} bpm`}
+              subtitle="Resting"
+              color={colors.accent}
+            />
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Google Calendar */}
       <View style={styles.section}>
@@ -469,28 +506,6 @@ export default function DashboardScreen() {
         <Card style={styles.calendarCard}>
           <GoogleCalendar />
         </Card>
-      </View>
-
-      {/* Up Next */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Up Next</Text>
-        
-        {upcomingWorkouts.map((workout) => (
-          <Card key={workout.id} style={styles.workoutCard}>
-            <View style={styles.workoutContent}>
-              <View style={[styles.workoutIcon, { backgroundColor: colors.primary + '20' }]}>
-                <Ionicons name="fitness" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.workoutInfo}>
-                <Text style={[styles.workoutTitle, { color: colors.foreground }]}>{workout.title}</Text>
-                <Text style={[styles.workoutTime, { color: colors.mutedForeground }]}>
-                  {workout.time} • {workout.duration}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
-            </View>
-          </Card>
-        ))}
       </View>
 
       {/* AI Coach Insights */}
@@ -520,7 +535,7 @@ export default function DashboardScreen() {
         <View style={styles.quickActions}>
           <TouchableOpacity 
             style={[styles.actionButton, { backgroundColor: colors.card }]}
-            onPress={() => router.push('/(tabs)/feed')}
+            onPress={() => setShowWorkoutModal(true)}
           >
             <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
             <Text style={[styles.actionText, { color: colors.foreground }]}>Log Activity</Text>
@@ -529,14 +544,6 @@ export default function DashboardScreen() {
           <TouchableOpacity style={[styles.actionButton, { backgroundColor: colors.card }]}>
             <Ionicons name="sync-outline" size={24} color={colors.primary} />
             <Text style={[styles.actionText, { color: colors.foreground }]}>Sync Data</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, { backgroundColor: colors.card }]}
-            onPress={() => router.push('/(tabs)/feed')}
-          >
-            <Ionicons name="calendar-outline" size={24} color={colors.primary} />
-            <Text style={[styles.actionText, { color: colors.foreground }]}>Schedule</Text>
           </TouchableOpacity>
         </View>
 
@@ -1397,6 +1404,148 @@ export default function DashboardScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Manual Workout Logging Modal */}
+      <Modal
+        visible={showWorkoutModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowWorkoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={styles.modalBackdrop} 
+            activeOpacity={1} 
+            onPress={() => setShowWorkoutModal(false)}
+          />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardView}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => setShowWorkoutModal(false)}>
+                  <Ionicons name="close" size={28} color={colors.foreground} />
+                </TouchableOpacity>
+                <Text style={[styles.modalTitle, { color: colors.foreground }]}>
+                  Log Workout
+                </Text>
+                <View style={{ width: 28 }} />
+              </View>
+
+              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                {/* Workout Type */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: colors.foreground }]}>Workout Type *</Text>
+                  <View style={styles.workoutTypeGrid}>
+                    {['Cardio', 'Strength', 'Yoga', 'Pilates', 'Cycling', 'Walking', 'Running', 'HIIT', 'CrossFit', 'Other'].map((type) => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.workoutTypeButton,
+                          { borderColor: colors.border, backgroundColor: colors.muted },
+                          workoutType === type.toLowerCase() && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setWorkoutType(type.toLowerCase())}
+                      >
+                        <Text style={[
+                          styles.workoutTypeText,
+                          { color: colors.foreground },
+                          workoutType === type.toLowerCase() && { color: '#fff', fontWeight: '600' }
+                        ]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Duration */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: colors.foreground }]}>Duration (minutes) *</Text>
+                  <TextInput
+                    style={[styles.input, { borderColor: colors.border, backgroundColor: colors.muted, color: colors.foreground }]}
+                    placeholder="e.g., 30"
+                    placeholderTextColor={colors.mutedForeground}
+                    keyboardType="numeric"
+                    value={workoutDuration}
+                    onChangeText={setWorkoutDuration}
+                  />
+                </View>
+
+                {/* Satisfaction */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: colors.foreground }]}>How did it feel?</Text>
+                  <View style={styles.satisfactionButtons}>
+                    {[
+                      { value: '1', label: '1 - Tough' },
+                      { value: '2', label: '2' },
+                      { value: '3', label: '3 - Okay' },
+                      { value: '4', label: '4' },
+                      { value: '5', label: '5 - Great' },
+                    ].map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[
+                          styles.satisfactionButton,
+                          { borderColor: colors.border, backgroundColor: colors.muted },
+                          workoutSatisfaction === option.value && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setWorkoutSatisfaction(option.value)}
+                      >
+                        <Text style={[
+                          styles.satisfactionText,
+                          { color: colors.foreground },
+                          workoutSatisfaction === option.value && { color: '#fff', fontWeight: '600' }
+                        ]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Notes */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.formLabel, { color: colors.foreground }]}>Notes (optional)</Text>
+                  <TextInput
+                    style={[styles.textArea, { borderColor: colors.border, backgroundColor: colors.muted, color: colors.foreground }]}
+                    placeholder="What did you do? Any observations?"
+                    placeholderTextColor={colors.mutedForeground}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    value={workoutNotes}
+                    onChangeText={setWorkoutNotes}
+                  />
+                </View>
+              </ScrollView>
+
+              {/* Save Button */}
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[
+                    styles.fullWidthButton,
+                    { backgroundColor: colors.primary },
+                    (!workoutType || !workoutDuration || isSavingWorkout) && styles.buttonDisabled
+                  ]}
+                  onPress={handleSaveWorkout}
+                  disabled={!workoutType || !workoutDuration || isSavingWorkout}
+                >
+                  {isSavingWorkout ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.fullWidthButtonText}>Save Workout</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -2001,5 +2150,67 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#fff',
+  },
+  workoutTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  workoutTypeButton: {
+    width: '48%',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  workoutTypeText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  satisfactionButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  satisfactionButton: {
+    flex: 1,
+    minWidth: '30%',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  satisfactionText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  textArea: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 16,
+    minHeight: 100,
+  },
+  modalKeyboardView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBody: {
+    maxHeight: 400,
+    paddingHorizontal: Spacing.lg,
+  },
+  formGroup: {
+    marginBottom: Spacing.lg,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: Spacing.sm,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 16,
   },
 });

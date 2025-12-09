@@ -1,23 +1,22 @@
 import { Card } from '@/components/ui/Card';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFitbit } from '@/hooks/useFitbit';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  Switch,
-  Alert,
-  Platform,
-  ActivityIndicator,
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type SettingItem = {
   icon: string;
@@ -185,53 +184,6 @@ export default function SettingsScreen() {
           subtitle: 'Not connected',
           onPress: () => Alert.alert('Coming Soon', 'Google Calendar integration will be available in Phase 3'),
           showChevron: true,
-        },
-        {
-          icon: 'heart-outline',
-          label: 'Apple Health',
-          subtitle: 'Not connected',
-          onPress: () => Alert.alert('Coming Soon', 'Apple Health integration will be available in Phase 3'),
-          showChevron: true,
-        },
-      ],
-    },
-    {
-      title: 'Support',
-      items: [
-        {
-          icon: 'help-circle-outline',
-          label: 'Help Center',
-          onPress: () => Alert.alert('Help', 'Visit our help center at help.lifeflow.com'),
-          showChevron: true,
-        },
-        {
-          icon: 'chatbubble-outline',
-          label: 'Contact Support',
-          onPress: () => Alert.alert('Support', 'Email us at support@lifeflow.com'),
-          showChevron: true,
-        },
-        {
-          icon: 'document-text-outline',
-          label: 'Privacy Policy',
-          onPress: () => Alert.alert('Privacy', 'View our privacy policy at lifeflow.com/privacy'),
-          showChevron: true,
-        },
-        {
-          icon: 'shield-checkmark-outline',
-          label: 'Terms of Service',
-          onPress: () => Alert.alert('Terms', 'View our terms at lifeflow.com/terms'),
-          showChevron: true,
-        },
-      ],
-    },
-    {
-      title: 'About',
-      items: [
-        {
-          icon: 'information-circle-outline',
-          label: 'App Version',
-          value: '1.0.0',
-          showChevron: false,
         },
       ],
     },

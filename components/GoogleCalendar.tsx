@@ -1,21 +1,21 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Linking,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { Card } from '@/components/ui/Card';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useGoogleCalendarOAuth } from '@/hooks/useGoogleCalendarOAuth';
 import { CalendarEvent } from '@/services/googleCalendarService';
-import { Card } from '@/components/ui/Card';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
+import { format, isToday, isTomorrow, parseISO } from 'date-fns';
+import React from 'react';
+import {
+    ActivityIndicator,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 interface GoogleCalendarProps {
   className?: string;
@@ -184,8 +184,8 @@ export function GoogleCalendar({ className }: GoogleCalendarProps) {
                     >
                       {event.summary}
                     </Text>
-                    <View style={[styles.eventBadge, { backgroundColor: eventType.color + '20' }]}>
-                      <Text style={[styles.eventBadgeText, { color: eventType.color }]}>
+                    <View style={[styles.eventBadge, { backgroundColor: eventType.color }]}>
+                      <Text style={[styles.eventBadgeText, { color: '#fff' }]}>
                         {eventType.label}
                       </Text>
                     </View>
