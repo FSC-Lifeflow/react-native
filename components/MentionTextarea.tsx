@@ -41,23 +41,41 @@ export function MentionTextarea({
   const [filteredUsers, setFilteredUsers] = useState<Friend[]>([]);
   const [mentionQuery, setMentionQuery] = useState('');
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [isInsertingMention, setIsInsertingMention] = useState(false);
+  const [lastKeyPressed, setLastKeyPressed] = useState<string | null>(null);
 
   const users = mentionableUsers || friends;
 
+  // Track the last key pressed
+  const handleKeyPress = (e: any) => {
+    if (e.nativeEvent.key === '@') {
+      setLastKeyPressed('@');
+    } else {
+      setLastKeyPressed(null);
+    }
+  };
+
   // Detect @ mentions
   useEffect(() => {
+    if (isInsertingMention) return;
+    
     const textBeforeCursor = value.substring(0, cursorPosition);
     const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
-
-    if (lastAtSymbol !== -1) {
+    
+    // Only show mention modal if @ was just pressed and cursor is right after @
+    if (lastKeyPressed === '@' && lastAtSymbol === cursorPosition - 1) {
+      setMentionQuery('');
+      setFilteredUsers(users);
+      setShowMentionModal(users.length > 0);
+    } else if (lastAtSymbol !== -1) {
       const textAfterAt = textBeforeCursor.substring(lastAtSymbol + 1);
-
-      // Check if there's a space after @ (which would end the mention)
-      if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-        // We're in a mention
+      const isTypingAfterAt = lastKeyPressed !== null && 
+                            ![' ', '\n', '@'].includes(lastKeyPressed) &&
+                            textAfterAt.length > 0 &&
+                            cursorPosition > lastAtSymbol;
+      
+      if (isTypingAfterAt) {
         setMentionQuery(textAfterAt.toLowerCase());
-
-        // Filter users based on query
         const filtered = users.filter(user => {
           const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
           const username = user.username?.toLowerCase() || '';
@@ -66,18 +84,18 @@ export function MentionTextarea({
             username.includes(textAfterAt.toLowerCase())
           );
         });
-
         setFilteredUsers(filtered);
         setShowMentionModal(filtered.length > 0);
-      } else {
+      } else if (lastKeyPressed === ' ' || lastKeyPressed === '\n') {
         setShowMentionModal(false);
       }
     } else {
       setShowMentionModal(false);
     }
-  }, [value, cursorPosition, users]);
+  }, [value, cursorPosition, users, isInsertingMention, lastKeyPressed]);
 
   const insertMention = (user: Friend) => {
+    setIsInsertingMention(true);
     const textBeforeCursor = value.substring(0, cursorPosition);
     const lastAtSymbol = textBeforeCursor.lastIndexOf('@');
     const username = user.username || `${user.first_name}${user.last_name}`;
@@ -87,8 +105,19 @@ export function MentionTextarea({
 
     const newValue = `${beforeMention}@${username} ${afterCursor}`;
     onChange(newValue);
-
+    
+    // Close the mention modal and reset states
     setShowMentionModal(false);
+    setMentionQuery('');
+    
+    // Calculate and set the new cursor position after the inserted mention
+    const newCursorPosition = lastAtSymbol + username.length + 2; // +2 for @ and space
+    setCursorPosition(newCursorPosition);
+    
+    // Reset the flag after a small delay
+    setTimeout(() => {
+      setIsInsertingMention(false);
+    }, 100);
   };
 
   return (
@@ -99,8 +128,13 @@ export function MentionTextarea({
         placeholderTextColor={colors.foreground + '80'}
         value={value}
         onChangeText={onChange}
+        onKeyPress={handleKeyPress}
         onSelectionChange={(event) => {
-          setCursorPosition(event.nativeEvent.selection.start);
+          const newPosition = event.nativeEvent.selection.start;
+          setCursorPosition(newPosition);
+          
+          // Reset lastKeyPressed when cursor moves
+          setLastKeyPressed(null);
         }}
         multiline
         maxLength={maxLength}
@@ -164,8 +198,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     ...Typography.body,
-    minHeight: 44,
-    maxHeight: 120,
+    minHeight: 100, // Reverted to original height
+    textAlignVertical: 'top',
   },
   modalOverlay: {
     flex: 1,

@@ -625,9 +625,13 @@ export default function FeedScreen() {
         )}
       </View>
 
-      {/* Post Content */}
+      {/* Post Content with @mention support */}
       {post.content && (
-        <Text style={[styles.postContent, { color: colors.foreground }]}>{post.content}</Text>
+        <MentionText 
+          text={post.content} 
+          style={[styles.postContent, { color: colors.foreground }]}
+          mentionColor={colors.tint}
+        />
       )}
 
       {/* Post Image */}
@@ -683,25 +687,20 @@ export default function FeedScreen() {
                   <TouchableOpacity 
                     onPress={() => router.push(`/user/${comment.user_id}` as any)}
                   >
-                    <Text style={[styles.commentAuthor, { color: colors.tint }]}>
-                      {comment.user?.first_name} {comment.user?.last_name}
-                    </Text>
+                    <Text style={[styles.commentAuthor, { color: colors.tint }]}>{comment.user?.first_name} {comment.user?.last_name}</Text>
                   </TouchableOpacity>
                   <MentionText 
                     text={comment.content} 
                     style={[styles.commentText, { color: colors.foreground }]}
+                    mentionColor={colors.tint}
                   />
                   <View style={styles.commentMeta}>
-                    <Text style={[styles.commentTime, { color: colors.subtext }]}>
-                      {formatTimeAgo(comment.created_at)}
-                    </Text>
+                    <Text style={[styles.commentTime, { color: colors.subtext }]}>{formatTimeAgo(comment.created_at)}</Text>
                     <TouchableOpacity
                       onPress={() => toggleReplies(comment.id)}
                       style={{ marginLeft: Spacing.md }}
                     >
-                      <Text style={[styles.replyButton, { color: colors.tint }]}>
-                        {comment.replies_count || 0} {comment.replies_count === 1 ? 'reply' : 'replies'}
-                      </Text>
+                      <Text style={[styles.replyButton, { color: colors.tint }]}>{comment.replies_count || 0} {comment.replies_count === 1 ? 'reply' : 'replies'}</Text>
                     </TouchableOpacity>
                     {comment.user_id === user?.id && (
                       <TouchableOpacity
@@ -726,18 +725,15 @@ export default function FeedScreen() {
                               <TouchableOpacity 
                                 onPress={() => router.push(`/user/${reply.user_id}` as any)}
                               >
-                                <Text style={[styles.replyAuthor, { color: colors.tint }]}>
-                                  {reply.user?.first_name} {reply.user?.last_name}
-                                </Text>
+                                <Text style={[styles.replyAuthor, { color: colors.tint }]}>{reply.user?.first_name} {reply.user?.last_name}</Text>
                               </TouchableOpacity>
                               <MentionText 
                                 text={reply.content} 
                                 style={[styles.replyText, { color: colors.foreground }]}
+                                mentionColor={colors.tint}
                               />
                               <View style={styles.replyMeta}>
-                                <Text style={[styles.replyTime, { color: colors.subtext }]}>
-                                  {formatTimeAgo(reply.created_at)}
-                                </Text>
+                                <Text style={[styles.replyTime, { color: colors.subtext }]}>{formatTimeAgo(reply.created_at)}</Text>
                                 {reply.user_id === user?.id && (
                                   <TouchableOpacity
                                     onPress={() => handleDeleteReply(comment.id, reply.id)}
@@ -896,15 +892,11 @@ export default function FeedScreen() {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                <TextInput
-                  style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
-                  placeholder="What's on your mind?"
-                  placeholderTextColor={colors.foreground + '80'}
+                <MentionTextarea
                   value={newPostContent}
-                  onChangeText={setNewPostContent}
-                  multiline
+                  onChange={setNewPostContent}
+                  placeholder="What's on your mind?"
                   maxLength={500}
-                  autoFocus
                 />
 
                 {selectedImage && (
@@ -1670,9 +1662,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   postContent: {
-    fontSize: 15,
+    fontSize: Typography.fontSizes.base,
     lineHeight: 20,
     marginBottom: Spacing.sm,
+  },
+  mentionText: {
+    fontWeight: '600',
   },
   postImage: {
     width: '100%',
@@ -1760,6 +1755,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.md,
+  },
+  mentionModal: {
+    maxHeight: 200,
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+  },
+  mentionList: {
+    maxHeight: 200,
+  },
+  mentionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  mentionAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: Spacing.md,
+  },
+  mentionName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  mentionUsername: {
+    fontSize: 14,
+    opacity: 0.7,
   },
   imagePreview: {
     position: 'relative',

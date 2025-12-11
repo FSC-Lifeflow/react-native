@@ -277,9 +277,24 @@ export const postService = {
    */
   async uploadImage(imageUri: string, userId: string): Promise<string> {
     try {
-      // Fetch the image as a blob
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
+      console.log('📤 Starting image upload:', imageUri);
+
+      // Create a blob from the image URI using XMLHttpRequest
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = function () {
+          resolve(xhr.response);
+        };
+        xhr.onerror = function (e) {
+          console.error('❌ XHR error:', e);
+          reject(new TypeError('Network request failed'));
+        };
+        xhr.responseType = 'blob';
+        xhr.open('GET', imageUri, true);
+        xhr.send(null);
+      });
+
+      console.log('✅ Blob created:', { size: blob.size, type: blob.type });
 
       // Get file extension from URI or blob type
       let fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
@@ -289,6 +304,7 @@ export const postService = {
       }
 
       const fileName = `${userId}/${Date.now()}.${fileExt}`;
+      console.log('📝 Uploading as:', fileName);
 
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
@@ -300,7 +316,7 @@ export const postService = {
         });
 
       if (error) {
-        console.error('Image upload error:', error);
+        console.error('❌ Image upload error:', error);
         throw new Error(`Failed to upload image: ${error.message}`);
       }
 
@@ -309,9 +325,10 @@ export const postService = {
         .from('post-images')
         .getPublicUrl(fileName);
 
+      console.log('✅ Image uploaded successfully:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Image upload failed:', error);
+      console.error('❌ Image upload failed:', error);
       throw error;
     }
   },
@@ -335,8 +352,16 @@ export const postService = {
 
       // Upload image if provided
       if (imageUri) {
+        console.log('📸 Uploading image for post...');
         imageUrl = await this.uploadImage(imageUri, currentUser.id);
+        console.log('✅ Image URL received:', imageUrl);
       }
+
+      console.log('📝 Creating post with data:', { 
+        content: content.trim(), 
+        imageUrl,
+        hasImage: !!imageUrl 
+      });
 
       // Create post in database
       const { data, error } = await supabase
