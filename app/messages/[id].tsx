@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { supabase } from '@/lib/supabase';
+import { ChatRoomWithDetails, Message, messageService } from '@/services/messageService';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Image,
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Card } from '@/components/ui/Card';
-import { useAuth } from '@/contexts/AuthContext';
-import { messageService, Message, ChatRoomWithDetails } from '@/services/messageService';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 
 interface Participant {
   id: string;
@@ -169,9 +168,12 @@ export default function ChatRoomScreen() {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !chatRoomId || isSending) return;
 
+    const messageContent = newMessage.trim();
+    setNewMessage('');
+
     try {
       setIsSending(true);
-      const sentMessage = await messageService.sendMessage(chatRoomId as string, newMessage.trim());
+      const sentMessage = await messageService.sendMessage(chatRoomId as string, messageContent);
       
       console.log('📤 Message sent, ID:', sentMessage.id);
       
@@ -185,7 +187,6 @@ export default function ChatRoomScreen() {
         return [...prev, sentMessage];
       });
       
-      setNewMessage('');
       scrollToBottom();
     } catch (error: any) {
       console.error('Error sending message:', error);

@@ -8,15 +8,16 @@ import { chatService } from '@/services/chatService';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +42,7 @@ export default function ChatScreen() {
     createConversation,
     loadConversationMessages,
     addMessageToConversation,
+    deleteConversation,
   } = useChatHistory();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -250,6 +252,26 @@ export default function ChatScreen() {
     }
   };
 
+  const handleDeleteConversation = (conversationId: string, title: string) => {
+    Alert.alert(
+      'Delete Conversation',
+      `Are you sure you want to delete "${title}"? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const success = await deleteConversation(conversationId);
+            if (success && selectedConversationId === conversationId) {
+              handleNewConversation();
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderMessage = ({ item }: { item: Message }) => (
     <View
       style={[
@@ -411,16 +433,19 @@ export default function ChatScreen() {
           {new Date(item.updated_at).toLocaleDateString()}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
+      <View style={styles.historyItemActions}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => handleDeleteConversation(item.id, item.title)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="trash-outline" size={18} color={colors.destructive || '#ef4444'} />
+        </TouchableOpacity>
+        <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
+      </View>
     </TouchableOpacity>
   );
 
-  // Quick suggestion chips
-  const suggestions = [
-    "How's my sleep affecting my workouts?",
-    'Suggest a workout for today',
-    "Show me this week's trends",
-  ];
 
   return (
     <KeyboardAvoidingView
@@ -529,23 +554,6 @@ export default function ChatScreen() {
 
           {/* Input Area */}
           <View style={[styles.inputContainer, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-            {/* Quick Suggestions */}
-            {messages.length <= 2 && (
-              <View style={styles.suggestionsContainer}>
-                {suggestions.map((suggestion, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.suggestionChip, { backgroundColor: colors.muted }]}
-                    onPress={() => setInputValue(suggestion)}
-                  >
-                    <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-                    <Text style={[styles.suggestionText, { color: colors.foreground }]} numberOfLines={1}>
-                      {suggestion}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
 
             {/* Selected Event Indicator */}
             {selectedEventId && (
@@ -716,24 +724,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderTopWidth: 1,
   },
-  suggestionsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  suggestionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
-  },
-  suggestionText: {
-    fontSize: Typography.fontSizes.xs,
-    maxWidth: 150,
-  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -779,6 +769,14 @@ const styles = StyleSheet.create({
   historyItemContent: {
     flex: 1,
     marginRight: Spacing.sm,
+  },
+  historyItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  deleteButton: {
+    padding: Spacing.xs,
   },
   pinIcon: {
     marginBottom: 4,

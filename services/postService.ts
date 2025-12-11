@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { supabase } from '../lib/supabase';
 
 /**
  * User post data structure
@@ -24,6 +24,42 @@ export type UserPost = {
   likes_count?: number;
   comments_count?: number;
   is_liked_by_user?: boolean;
+};
+
+/**
+ * Comment data structure
+ */
+export type PostComment = {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  user?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url?: string;
+  };
+  replies?: CommentReply[];
+  replies_count?: number;
+};
+
+/**
+ * Comment reply data structure
+ */
+export type CommentReply = {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  user?: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url?: string;
+  };
 };
 
 /**
@@ -480,6 +516,221 @@ export const postService = {
       return null;
     } catch (error) {
       console.error('Pick image error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Gets comments for a post
+   */
+  async getComments(postId: string): Promise<PostComment[]> {
+    try {
+      const { data: comments, error } = await supabase
+        .from('post_comments')
+        .select('*')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Failed to get comments:', error);
+        throw new Error('Failed to get comments');
+      }
+
+      if (!comments || comments.length === 0) {
+        return [];
+      }
+
+      // Get user info for all comments
+      const userIds = [...new Set(comments.map(c => c.user_id))];
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', userIds);
+
+      // Get replies for all comments
+      const commentIds = comments.map(c => c.id);
+      const { data: replies } = await supabase
+        .from('comment_replies')
+        .select('*')
+        .in('comment_id', commentIds)
+        .order('created_at', { ascending: true });
+
+      // Get user info for replies
+      const replyUserIds = [...new Set(replies?.map(r => r.user_id) || [])];
+      const allUserIds = [...new Set([...userIds, ...replyUserIds])];
+      const { data: allUsers } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, avatar_url')
+        .in('id', allUserIds);
+
+      // Map replies to comments
+      const repliesMap = new Map<string, CommentReply[]>();
+      replies?.forEach(reply => {
+        const existing = repliesMap.get(reply.comment_id) || [];
+        repliesMap.set(reply.comment_id, [...existing, {
+          ...reply,
+          user: allUsers?.find(u => u.id === reply.user_id)
+        }]);
+      });
+
+      return comments.map(comment => ({
+        ...comment,
+        user: allUsers?.find(u => u.id === comment.user_id),
+        replies: repliesMap.get(comment.id) || [],
+        replies_count: repliesMap.get(comment.id)?.length || 0
+      }));
+    } catch (error) {
+      console.error('Get comments error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Adds a comment to a post
+   */
+  async addComment(postId: string, content: string): Promise<PostComment> {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      if (!content.trim()) {
+        throw new Error('Comment content is required');
+      }
+
+      const { data, error } = await supabase
+        .from('post_comments')
+        .insert({
+          post_id: postId,
+          user_id: currentUser.id,
+          content: content.trim()
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Failed to add comment:', error);
+        throw new Error('Failed to add comment');
+      }
+
+      // Get user info
+      const { data: userInfo } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, avatar_url')
+        .eq('id', currentUser.id)
+        .single();
+
+      return {
+        ...data,
+        user: userInfo || undefined,
+        replies: [],
+        replies_count: 0
+      };
+    } catch (error) {
+      console.error('Add comment error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Deletes a comment
+   */
+  async deleteComment(commentId: string): Promise<void> {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const { error } = await supabase
+        .from('post_comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('user_id', currentUser.id);
+
+      if (error) {
+        console.error('Failed to delete comment:', error);
+        throw new Error('Failed to delete comment');
+      }
+    } catch (error) {
+      console.error('Delete comment error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Adds a reply to a comment
+   */
+  async addReply(commentId: string, content: string): Promise<CommentReply> {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      if (!content.trim()) {
+        throw new Error('Reply content is required');
+      }
+
+      const { data, error } = await supabase
+        .from('comment_replies')
+        .insert({
+          comment_id: commentId,
+          user_id: currentUser.id,
+          content: content.trim()
+        })
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('Failed to add reply:', error);
+        throw new Error('Failed to add reply');
+      }
+
+      // Get user info
+      const { data: userInfo } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, avatar_url')
+        .eq('id', currentUser.id)
+        .single();
+
+      return {
+        ...data,
+        user: userInfo || undefined
+      };
+    } catch (error) {
+      console.error('Add reply error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Deletes a reply
+   */
+  async deleteReply(replyId: string): Promise<void> {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
+      const { error } = await supabase
+        .from('comment_replies')
+        .delete()
+        .eq('id', replyId)
+        .eq('user_id', currentUser.id);
+
+      if (error) {
+        console.error('Failed to delete reply:', error);
+        throw new Error('Failed to delete reply');
+      }
+    } catch (error) {
+      console.error('Delete reply error:', error);
       throw error;
     }
   },
