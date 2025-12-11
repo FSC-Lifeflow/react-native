@@ -1,4 +1,5 @@
 import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
@@ -29,8 +30,12 @@ function base64Encode(str: string): string {
 // Enable browser session completion on iOS
 WebBrowser.maybeCompleteAuthSession();
 
-const FITBIT_CLIENT_ID = process.env.EXPO_PUBLIC_FITBIT_CLIENT_ID || '';
-const FITBIT_CLIENT_SECRET = process.env.EXPO_PUBLIC_FITBIT_CLIENT_SECRET || '';
+const FITBIT_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_FITBIT_CLIENT_ID || '';
+const FITBIT_CLIENT_SECRET = Constants.expoConfig?.extra?.EXPO_PUBLIC_FITBIT_CLIENT_SECRET || '';
+
+if (!FITBIT_CLIENT_ID || !FITBIT_CLIENT_SECRET) {
+  console.warn('⚠️ Missing Fitbit credentials. Please set EXPO_PUBLIC_FITBIT_CLIENT_ID and EXPO_PUBLIC_FITBIT_CLIENT_SECRET');
+}
 
 // OAuth endpoints
 const discovery = {
