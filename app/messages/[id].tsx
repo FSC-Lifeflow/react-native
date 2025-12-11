@@ -22,6 +22,8 @@ import { messageService, Message, ChatRoomWithDetails } from '@/services/message
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { MentionText } from '@/components/MentionText';
+import { WorkoutInvitationCard } from '../../components/WorkoutInvitationCard';
+import { SendWorkoutInvitationDialog } from '../../components/SendWorkoutInvitationDialog';
 
 interface Participant {
   id: string;
@@ -49,6 +51,7 @@ export default function ChatRoomScreen() {
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionSuggestions, setMentionSuggestions] = useState<Participant[]>([]);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+  const [showWorkoutInvitationDialog, setShowWorkoutInvitationDialog] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const subscriptionRef = useRef<any>(null);
@@ -254,6 +257,18 @@ export default function ChatRoomScreen() {
     }
   };
 
+  const handleSendWorkoutInvitation = async (workoutData: any) => {
+    if (!chatRoomId || typeof chatRoomId !== 'string') return;
+    
+    try {
+      await messageService.sendWorkoutInvitation(chatRoomId, workoutData);
+      scrollToBottom();
+    } catch (error: any) {
+      console.error('Error sending workout invitation:', error);
+      Alert.alert('Error', 'Failed to send workout invitation');
+    }
+  };
+
   const scrollToBottom = () => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -276,6 +291,32 @@ export default function ChatRoomScreen() {
     const isOwnMessage = message.sender_id === user?.id;
     const isDeleted = message.is_deleted;
 
+    // Render workout invitation card
+    if (message.message_type === 'workout_invitation' && message.metadata && !isDeleted) {
+      return (
+        <View
+          key={message.id}
+          style={[
+            styles.messageContainer,
+            styles.workoutInvitationContainer,
+          ]}
+        >
+          <WorkoutInvitationCard
+            messageId={message.id}
+            workoutData={message.metadata}
+            senderId={message.sender_id}
+            senderName={message.sender?.first_name || message.sender?.username || 'Someone'}
+            currentUserId={user?.id || ''}
+            participants={participants}
+          />
+          <Text style={[styles.messageTime, { color: colors.foreground, opacity: 0.5, marginTop: Spacing.xs }]}>
+            {formatTimeAgo(message.created_at)}
+          </Text>
+        </View>
+      );
+    }
+
+    // Render regular text message
     return (
       <View
         key={message.id}
@@ -421,6 +462,12 @@ export default function ChatRoomScreen() {
               )}
             </View>
           </View>
+          <TouchableOpacity
+            style={styles.workoutButton}
+            onPress={() => setShowWorkoutInvitationDialog(true)}
+          >
+            <Ionicons name="barbell" size={24} color={colors.tint} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -509,6 +556,13 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Send Workout Invitation Dialog */}
+      <SendWorkoutInvitationDialog
+        visible={showWorkoutInvitationDialog}
+        onClose={() => setShowWorkoutInvitationDialog(false)}
+        onSend={handleSendWorkoutInvitation}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -549,6 +603,10 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
+  workoutButton: {
+    padding: Spacing.sm,
+    marginLeft: Spacing.sm,
+  },
   headerTitle: {
     ...Typography.body,
     fontWeight: '600',
@@ -584,6 +642,10 @@ const styles = StyleSheet.create({
   messageContainer: {
     flexDirection: 'row',
     marginBottom: Spacing.md,
+  },
+  workoutInvitationContainer: {
+    flexDirection: 'column',
+    width: '100%',
   },
   ownMessageContainer: {
     justifyContent: 'flex-end',

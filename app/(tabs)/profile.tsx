@@ -86,15 +86,19 @@ export default function ProfileScreen() {
           console.error('Failed to fetch friends:', error);
         }
 
-        // Fetch workouts count from Fitbit
+        // Fetch workouts count from Fitbit (only if connected)
         try {
-          const activities = await fitbitService.getActivities();
-          if (activities?.summary?.activityCalories) {
-            // Count activities that burned calories (indicating a workout)
-            setStats(prev => ({ ...prev, workouts: activities.summary.activityCalories > 0 ? 1 : 0 }));
+          const isConnected = await fitbitService.isConnected();
+          if (isConnected) {
+            const activities = await fitbitService.getTodayActivity();
+            if (activities && activities.activeMinutes > 0) {
+              // Count as a workout if there are active minutes
+              setStats(prev => ({ ...prev, workouts: 1 }));
+            }
           }
         } catch (error) {
-          console.error('Failed to fetch workouts:', error);
+          console.warn('Failed to fetch workouts from Fitbit:', error);
+          // Silently fail if Fitbit is not connected - this is expected
         }
       } catch (error) {
         console.error('Failed to fetch data:', error);

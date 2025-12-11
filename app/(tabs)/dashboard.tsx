@@ -1,6 +1,7 @@
 import { GoogleCalendar } from '@/components/GoogleCalendar';
 import { Card } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
+import { WorkoutChallengeAcceptDialog } from '@/components/WorkoutChallengeAcceptDialog';
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -12,6 +13,7 @@ import { Friend } from '@/services/friendService';
 import { CalendarEvent, googleCalendarService } from '@/services/googleCalendarService';
 import { Notification, notificationService } from '@/services/notificationService';
 import { workoutService } from '@/services/workoutService';
+import { coWorkoutService } from '@/services/coWorkoutService';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -77,6 +79,10 @@ export default function DashboardScreen() {
   const [workoutSatisfaction, setWorkoutSatisfaction] = useState('3');
   const [workoutNotes, setWorkoutNotes] = useState('');
   const [isSavingWorkout, setIsSavingWorkout] = useState(false);
+  
+  // Challenge accept dialog states
+  const [showChallengeAcceptDialog, setShowChallengeAcceptDialog] = useState(false);
+  const [selectedChallengeNotification, setSelectedChallengeNotification] = useState<Notification | null>(null);
   
   const { friends } = useFriends();
   const { isAuthenticated: isCalendarConnected } = useGoogleCalendar();
@@ -814,8 +820,22 @@ export default function DashboardScreen() {
                             <TouchableOpacity
                               style={[styles.acceptButton, { backgroundColor: '#ff3b30' }]}
                               onPress={async () => {
-                                Alert.alert('Challenge Accepted', "You've accepted the workout challenge!");
-                                await handleRemoveNotification(item.id);
+                                console.log('🎯 Accept challenge button pressed');
+                                console.log('📋 Challenge notification data:', item.data);
+                                
+                                // Store the notification data
+                                const notification = item;
+                                
+                                // Close notifications modal first
+                                setShowNotificationsModal(false);
+                                
+                                // Wait for modal animation to complete
+                                await new Promise(resolve => setTimeout(resolve, 350));
+                                
+                                // Then set the challenge data and open dialog
+                                setSelectedChallengeNotification(notification);
+                                setShowChallengeAcceptDialog(true);
+                                console.log('✅ Dialog should now be visible');
                               }}
                             >
                               <Ionicons name="flash" size={16} color="#fff" />
@@ -1546,6 +1566,68 @@ export default function DashboardScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Workout Challenge Accept Dialog */}
+      {(() => {
+        console.log('🔍 Dialog render check:', {
+          hasNotification: !!selectedChallengeNotification,
+          hasData: !!selectedChallengeNotification?.data,
+          dialogVisible: showChallengeAcceptDialog,
+          shouldRender: !!(selectedChallengeNotification && selectedChallengeNotification.data && showChallengeAcceptDialog)
+        });
+        return null;
+      })()}
+      {selectedChallengeNotification && selectedChallengeNotification.data && showChallengeAcceptDialog && (
+        <WorkoutChallengeAcceptDialog
+          visible={true}
+          onClose={() => {
+            console.log('🚪 Dialog onClose called from parent');
+            console.trace('onClose call stack');
+            setShowChallengeAcceptDialog(false);
+            setSelectedChallengeNotification(null);
+          }}
+          challengeData={{
+            challenger_name: selectedChallengeNotification.data.challenger_name || 'Someone',
+            workout_form: selectedChallengeNotification.data.workout_form || 'Workout',
+            time_option: selectedChallengeNotification.data.time_option || 'flexible',
+            workout_time: selectedChallengeNotification.data.workout_time,
+            workout_duration: selectedChallengeNotification.data.workout_duration,
+            workout_note: selectedChallengeNotification.data.workout_note,
+          }}
+          onAccept={async (scheduledTime: string, duration: number) => {
+            console.log('🎉 onAccept called with:', { scheduledTime, duration });
+            try {
+              if (!user?.id || !selectedChallengeNotification.data) {
+                console.log('❌ Missing user or notification data');
+                return;
+              }
+              
+              const challengeId = selectedChallengeNotification.data.challenge_id;
+              if (!challengeId) {
+                throw new Error('Challenge ID not found in notification');
+              }
+              
+              // Accept the challenge and create calendar event
+              await coWorkoutService.acceptWorkoutChallenge(
+                challengeId,
+                scheduledTime,
+                duration
+              );
+
+              // Remove the notification
+              await handleRemoveNotification(selectedChallengeNotification.id);
+              
+              Alert.alert('Success', '✅ Challenge accepted! Added to your calendar.');
+              setShowChallengeAcceptDialog(false);
+              setSelectedChallengeNotification(null);
+            } catch (error: any) {
+              console.error('❌ Error accepting challenge:', error);
+              Alert.alert('Error', error.message || 'Failed to accept challenge. Please try again.');
+              throw error;
+            }
+          }}
+        />
+      )}
     </ScrollView>
   );
 }
