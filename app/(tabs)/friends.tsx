@@ -18,8 +18,9 @@ import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Card } from '@/components/ui/Card';
 import { useFriends, useFriendRequests, useUserSearch, useSendFriendRequest } from '@/hooks/useFriends';
-import { Friend, FriendRequest, UserSearchResult } from '@/services/friendService';
+import { Friend, FriendRequest, UserSearchResult, friendService } from '@/services/friendService';
 import { useRouter } from 'expo-router';
+import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 
 type TabType = 'friends' | 'requests' | 'search';
 
@@ -48,8 +49,10 @@ export default function FriendsScreen() {
   } = useFriendRequests();
   const { users, isLoading: isSearching } = useUserSearch(searchQuery);
   const { sendRequest, isSending } = useSendFriendRequest();
+  const { unreadCount } = useUnreadMessages();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -75,6 +78,41 @@ export default function FriendsScreen() {
 
     if (Platform.OS === 'web' && confirmUnfriend) {
       unfriend(friendId);
+    }
+  };
+
+  const handleBlockUser = async (userId: string, userName: string) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Are you sure you want to block ${userName}? They will not be able to send you friend requests.`)) {
+        await blockUser(userId, userName);
+      }
+    } else {
+      Alert.alert(
+        'Block User',
+        `Are you sure you want to block ${userName}? They will not be able to send you friend requests.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Block', 
+            style: 'destructive', 
+            onPress: () => blockUser(userId, userName) 
+          },
+        ]
+      );
+    }
+  };
+
+  const blockUser = async (userId: string, userName: string) => {
+    setBlockingUserId(userId);
+    try {
+      await friendService.blockUser(userId);
+      Alert.alert('User Blocked', `${userName} has been blocked successfully.`);
+      // Refresh the requests list
+      await Promise.all([refetchReceived(), refetchSent()]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to block user');
+    } finally {
+      setBlockingUserId(null);
     }
   };
 
@@ -105,7 +143,11 @@ export default function FriendsScreen() {
 
   const renderFriendItem = (friend: Friend) => (
     <Card key={friend.id} style={styles.friendCard}>
-      <View style={styles.friendContent}>
+      <TouchableOpacity 
+        style={styles.friendContent}
+        onPress={() => router.push(`/user/${friend.id}` as any)}
+        activeOpacity={0.7}
+      >
         <View style={styles.friendInfo}>
           {friend.avatar_url ? (
             <Image source={{ uri: friend.avatar_url }} style={styles.avatar} />
@@ -125,12 +167,15 @@ export default function FriendsScreen() {
         </View>
         <TouchableOpacity
           style={[styles.actionButton, styles.unfriendButton]}
-          onPress={() => handleUnfriend(friend.id, `${friend.first_name} ${friend.last_name}`)}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleUnfriend(friend.id, `${friend.first_name} ${friend.last_name}`);
+          }}
           disabled={isUnfriending}
         >
           <Ionicons name="person-remove" size={20} color="#ff3b30" />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     </Card>
   );
 
@@ -175,6 +220,17 @@ export default function FriendsScreen() {
                 >
                   <Ionicons name="close" size={20} color="#ff3b30" />
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.blockButton]}
+                  onPress={() => handleBlockUser(user.id, `${user.first_name} ${user.last_name}`)}
+                  disabled={blockingUserId === user.id}
+                >
+                  {blockingUserId === user.id ? (
+                    <ActivityIndicator size="small" color="#ff3b30" />
+                  ) : (
+                    <Ionicons name="ban" size={20} color="#ff3b30" />
+                  )}
+                </TouchableOpacity>
               </>
             ) : (
               <TouchableOpacity
@@ -193,7 +249,11 @@ export default function FriendsScreen() {
 
   const renderSearchResult = (user: UserSearchResult) => (
     <Card key={user.id} style={styles.friendCard}>
-      <View style={styles.friendContent}>
+      <TouchableOpacity 
+        style={styles.friendContent}
+        onPress={() => router.push(`/user/${user.id}` as any)}
+        activeOpacity={0.7}
+      >
         <View style={styles.friendInfo}>
           {user.avatar_url ? (
             <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
@@ -213,12 +273,15 @@ export default function FriendsScreen() {
         </View>
         <TouchableOpacity
           style={[styles.actionButton, styles.addButton, { backgroundColor: colors.tint }]}
-          onPress={() => sendRequest(user.id)}
+          onPress={(e) => {
+            e.stopPropagation();
+            sendRequest(user.id);
+          }}
           disabled={isSending}
         >
           <Ionicons name="person-add" size={20} color="#fff" />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     </Card>
   );
 
@@ -233,6 +296,13 @@ export default function FriendsScreen() {
             onPress={() => router.push('/messages')}
           >
             <Ionicons name="chatbubbles" size={20} color="#fff" />
+            {unreadCount > 0 && (
+              <View style={styles.messageBadge}>
+                <Text style={styles.messageBadgeText}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
         <View style={styles.headerStats}>
@@ -309,7 +379,23 @@ export default function FriendsScreen() {
               <>
                 {receivedRequests.length > 0 && (
                   <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Received Requests</Text>
+                    <View style={styles.sectionTitleContainer}>
+                      <Text style={[styles.sectionTitle, { color: colors.text }]}>Received Requests</Text>
+                    </View>
+                    <View style={styles.iconLegend}>
+                      <View style={styles.legendItem}>
+                        <Ionicons name="checkmark" size={16} color={colors.tint} />
+                        <Text style={[styles.legendText, { color: colors.subtext }]}>Accept</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <Ionicons name="close" size={16} color="#ff3b30" />
+                        <Text style={[styles.legendText, { color: colors.subtext }]}>Decline</Text>
+                      </View>
+                      <View style={styles.legendItem}>
+                        <Ionicons name="ban" size={16} color="#ff3b30" />
+                        <Text style={[styles.legendText, { color: colors.subtext }]}>Block</Text>
+                      </View>
+                    </View>
                     {receivedRequests.map((request) => renderRequestItem(request, 'received'))}
                   </View>
                 )}
@@ -380,6 +466,26 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  messageBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#ff3b30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  messageBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   headerStats: {
     flexDirection: 'row',
@@ -460,9 +566,27 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: Spacing.lg,
   },
+  sectionTitleContainer: {
+    marginBottom: Spacing.xs,
+  },
   sectionTitle: {
     ...Typography.h3,
+    marginBottom: Spacing.xs,
+  },
+  iconLegend: {
+    flexDirection: 'row',
+    gap: Spacing.md,
     marginBottom: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  legendText: {
+    ...Typography.caption,
+    fontSize: 12,
   },
   friendCard: {
     marginBottom: Spacing.sm,
@@ -513,6 +637,9 @@ const styles = StyleSheet.create({
     // backgroundColor set dynamically
   },
   rejectButton: {
+    backgroundColor: '#ffebee',
+  },
+  blockButton: {
     backgroundColor: '#ffebee',
   },
   unfriendButton: {

@@ -5,6 +5,8 @@ import { Colors, Typography, Spacing, BorderRadius } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Card } from '@/components/ui/Card';
 import { messageService, WorkoutInvitationData } from '@/services/messageService';
+import { coWorkoutService } from '@/services/coWorkoutService';
+import { WorkoutInvitationAcceptDialog } from './WorkoutInvitationAcceptDialog';
 import { Alert } from 'react-native';
 
 interface Participant {
@@ -35,6 +37,7 @@ export function WorkoutInvitationCard({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const [isResponding, setIsResponding] = useState(false);
+  const [showAcceptDialog, setShowAcceptDialog] = useState(false);
 
   const isOwnInvitation = senderId === currentUserId;
   const hasAccepted = workoutData.accepted_by?.includes(currentUserId);
@@ -44,24 +47,49 @@ export function WorkoutInvitationCard({
   const startDate = workoutData.event_start ? new Date(workoutData.event_start) : null;
   const endDate = workoutData.event_end ? new Date(workoutData.event_end) : null;
 
-  const handleResponse = async (action: 'accept' | 'decline') => {
+  const handleDecline = async () => {
     try {
       setIsResponding(true);
-      console.log('🎯 Updating workout invitation response:', { messageId, currentUserId, action });
+      console.log('🎯 Declining workout invitation:', { messageId, currentUserId });
 
-      await messageService.updateWorkoutInvitationResponse(messageId, currentUserId, action);
+      await messageService.updateWorkoutInvitationResponse(messageId, currentUserId, 'decline');
 
-      console.log('✅ Workout invitation response updated successfully');
+      console.log('✅ Workout invitation declined successfully');
 
-      Alert.alert(
-        'Success',
-        action === 'accept'
-          ? '✅ You accepted the workout invitation!'
-          : '❌ You declined the workout invitation'
-      );
+      Alert.alert('Success', '❌ You declined the workout invitation');
     } catch (error: any) {
-      console.error('❌ Error responding to invitation:', error);
-      Alert.alert('Error', 'Failed to respond to invitation. Please try again.');
+      console.error('❌ Error declining invitation:', error);
+      Alert.alert('Error', 'Failed to decline invitation. Please try again.');
+    } finally {
+      setIsResponding(false);
+    }
+  };
+
+  const handleAcceptWithScheduling = async (scheduledTime: string, duration: number) => {
+    try {
+      setIsResponding(true);
+      
+      // Accept the invitation and create calendar event
+      await coWorkoutService.acceptWorkoutInvitation(
+        {
+          inviter_id: senderId,
+          inviter_name: senderName,
+          workout_type: workoutData.event_summary || 'Workout',
+          workout_place: workoutData.event_location,
+          workout_note: workoutData.event_description,
+        },
+        scheduledTime,
+        duration
+      );
+
+      // Update the invitation response in the message
+      await messageService.updateWorkoutInvitationResponse(messageId, currentUserId, 'accept');
+
+      Alert.alert('Success', '✅ Invitation accepted! Added to your calendar.');
+    } catch (error: any) {
+      console.error('❌ Error accepting invitation:', error);
+      Alert.alert('Error', 'Failed to accept invitation. Please try again.');
+      throw error;
     } finally {
       setIsResponding(false);
     }
@@ -97,6 +125,7 @@ export function WorkoutInvitationCard({
   };
 
   return (
+    <>
     <Card style={styles.container}>
       <View style={[styles.cardBorder, { borderColor: colors.tint }]}>
       <View style={styles.header}>
@@ -195,7 +224,7 @@ export function WorkoutInvitationCard({
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => handleResponse(hasAccepted ? 'decline' : 'accept')}
+                onPress={() => hasAccepted ? handleDecline() : setShowAcceptDialog(true)}
                 disabled={isResponding}
               >
                 <Text style={[styles.changeResponse, { color: colors.tint }]}>
@@ -207,7 +236,7 @@ export function WorkoutInvitationCard({
             <View style={styles.actionButtons}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.acceptButton, { backgroundColor: '#34c759' }]}
-                onPress={() => handleResponse('accept')}
+                onPress={() => setShowAcceptDialog(true)}
                 disabled={isResponding}
               >
                 {isResponding ? (
@@ -221,7 +250,7 @@ export function WorkoutInvitationCard({
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionButton, styles.declineButton, { borderColor: '#ff3b30' }]}
-                onPress={() => handleResponse('decline')}
+                onPress={handleDecline}
                 disabled={isResponding}
               >
                 {isResponding ? (
@@ -248,6 +277,24 @@ export function WorkoutInvitationCard({
       )}
       </View>
     </Card>
+
+      {/* Workout Invitation Accept Dialog */}
+      {startDate && endDate && (
+        <WorkoutInvitationAcceptDialog
+          visible={showAcceptDialog}
+          onClose={() => setShowAcceptDialog(false)}
+          invitationData={{
+            inviter_name: senderName,
+            workout_type: workoutData.event_summary || 'Workout',
+            workout_time: workoutData.event_start,
+            workout_duration: Math.round((endDate.getTime() - startDate.getTime()) / 60000),
+            workout_place: workoutData.event_location,
+            workout_note: workoutData.event_description,
+          }}
+          onAccept={handleAcceptWithScheduling}
+        />
+      )}
+    </>
   );
 }
 

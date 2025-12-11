@@ -4,16 +4,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { supabase } from '@/lib/supabase';
 import { authService } from '@/services/authService';
+import { friendService, type BlockedUser } from '@/services/friendService';
 import { fitbitService } from '@/services/fitbitService';
-import { friendService } from '@/services/friendService';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Image,
     Modal,
     ScrollView,
     StyleSheet,
@@ -54,6 +54,11 @@ export default function ProfileScreen() {
     friends: 0,
     workouts: 0,
   });
+  
+  // Blocked users state
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+  const [showBlockedUsers, setShowBlockedUsers] = useState(false);
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false);
 
   // Fetch user fitness preferences and stats on mount
   useEffect(() => {
@@ -83,16 +88,19 @@ export default function ProfileScreen() {
           console.error('Failed to fetch friends:', error);
         }
 
-        // Fetch workouts count from Fitbit activity data
+        // Fetch workouts count from Fitbit (only if connected)
         try {
-          const activity = await fitbitService.getTodayActivity();
-          if (activity) {
-            // Count as a workout if there are active minutes
-            const hasWorkout = (activity.activeMinutes || 0) > 0 ? 1 : 0;
-            setStats(prev => ({ ...prev, workouts: hasWorkout }));
+          const isConnected = await fitbitService.isConnected();
+          if (isConnected) {
+            const activities = await fitbitService.getTodayActivity();
+            if (activities && activities.activeMinutes > 0) {
+              // Count as a workout if there are active minutes
+              setStats(prev => ({ ...prev, workouts: 1 }));
+            }
           }
         } catch (error) {
-          console.error('Failed to fetch workouts:', error);
+          console.warn('Failed to fetch workouts from Fitbit:', error);
+          // Silently fail if Fitbit is not connected - this is expected
         }
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -115,15 +123,46 @@ export default function ProfileScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.5, // Reduced from 0.8 to 0.5 for smaller file size
       });
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets[0] && user?.id) {
+        const asset = result.assets[0];
+        
+        console.log('📸 Selected image details:');
+        console.log('  - URI:', asset.uri);
+        console.log('  - Width:', asset.width);
+        console.log('  - Height:', asset.height);
+        console.log('  - File size:', asset.fileSize ? `${(asset.fileSize / 1024 / 1024).toFixed(2)} MB` : 'unknown');
+        
+        // Validate file size (2MB max to be safe with Supabase limits)
+        if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
+          Alert.alert(
+            'File Too Large', 
+            `Image is ${(asset.fileSize / 1024 / 1024).toFixed(2)}MB. Please select an image smaller than 2MB or try taking a new photo.`
+          );
+          return;
+        }
+
         setLoading(true);
-        await uploadAvatar(result.assets[0].uri);
+        try {
+          console.log('🚀 Starting avatar upload...');
+          const publicUrl = await authService.uploadAvatar(user.id, asset.uri);
+          console.log('✅ Avatar upload complete, refreshing user...');
+          await refreshUser();
+          Alert.alert('Success', 'Profile photo updated successfully');
+        } catch (error) {
+          console.error('❌ Avatar upload error:', error);
+          Alert.alert(
+            'Upload Failed',
+            error instanceof Error ? error.message : 'Failed to upload avatar. Please try again.'
+          );
+        } finally {
+          setLoading(false);
+        }
       }
     } catch (error) {
-      console.error('Error picking image:', error);
+      console.error('Image picker error:', error);
       Alert.alert('Error', 'Failed to pick image');
     } finally {
       setLoading(false);
@@ -293,7 +332,26 @@ export default function ProfileScreen() {
         <View style={styles.avatarSection}>
           <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
             {user?.avatar_url ? (
-              <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+              <Image 
+                source={user.avatar_url}
+                style={styles.avatar}
+                contentFit="cover"
+                transition={200}
+                cachePolicy="memory-disk"
+                onError={(error) => {
+                  console.error('❌ ===== AVATAR LOAD ERROR =====');
+                  console.error('URL:', user.avatar_url);
+                  console.error('Error:', error);
+                  console.error('URL starts with http:', user.avatar_url?.startsWith('http'));
+                  console.error('URL length:', user.avatar_url?.length);
+                  console.error('================================');
+                }}
+                onLoad={() => {
+                  console.log('✅ ===== AVATAR LOADED =====');
+                  console.log('URL:', user.avatar_url);
+                  console.log('============================');
+                }}
+              />
             ) : (
               <View style={[styles.avatarPlaceholder, { backgroundColor: colors.muted }]}>
                 <Ionicons name="person" size={40} color={colors.mutedForeground} />
@@ -535,7 +593,7 @@ export default function ProfileScreen() {
 
         {/* Save Button */}
         <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: colors.primary }]}
+          style={[styles.savePreferencesButton, { backgroundColor: colors.primary }]}
           onPress={handleSaveFitnessPreferences}
           disabled={loading}
         >
@@ -544,10 +602,103 @@ export default function ProfileScreen() {
           ) : (
             <>
               <Ionicons name="save-outline" size={20} color="#fff" />
-              <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>Save Preferences</Text>
+              <Text style={[styles.savePreferencesButtonText, { color: colors.primaryForeground }]}>Save Preferences</Text>
             </>
           )}
         </TouchableOpacity>
+      </Card>
+
+      {/* Blocked Users Section */}
+      <Card style={styles.section}>
+        <TouchableOpacity 
+          style={styles.sectionHeader}
+          onPress={async () => {
+            if (!showBlockedUsers) {
+              setLoadingBlockedUsers(true);
+              try {
+                const blocked = await friendService.getBlockedUsers();
+                setBlockedUsers(blocked);
+              } catch (error) {
+                console.error('Failed to load blocked users:', error);
+                Alert.alert('Error', 'Failed to load blocked users');
+              } finally {
+                setLoadingBlockedUsers(false);
+              }
+            }
+            setShowBlockedUsers(!showBlockedUsers);
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="ban" size={20} color={colors.destructive} style={{ marginRight: Spacing.sm }} />
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Blocked Users</Text>
+          </View>
+          <Ionicons 
+            name={showBlockedUsers ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color={colors.mutedForeground} 
+          />
+        </TouchableOpacity>
+
+        {showBlockedUsers && (
+          <View style={{ marginTop: Spacing.md }}>
+            {loadingBlockedUsers ? (
+              <View style={{ padding: Spacing.lg, alignItems: 'center' }}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : blockedUsers.length > 0 ? (
+              blockedUsers.map((blockedUser) => (
+                <View 
+                  key={blockedUser.id} 
+                  style={[
+                    styles.blockedUserItem,
+                    { borderBottomColor: colors.border }
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.blockedUserName, { color: colors.foreground }]}>
+                      {blockedUser.user.first_name} {blockedUser.user.last_name}
+                    </Text>
+                    <Text style={[styles.blockedUserUsername, { color: colors.mutedForeground }]}>
+                      @{blockedUser.user.username}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.unblockButton, { backgroundColor: colors.primary }]}
+                    onPress={async () => {
+                      Alert.alert(
+                        'Unblock User',
+                        `Are you sure you want to unblock ${blockedUser.user.first_name} ${blockedUser.user.last_name}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Unblock',
+                            onPress: async () => {
+                              try {
+                                await friendService.unblockUser(blockedUser.blocked_id);
+                                setBlockedUsers(prev => prev.filter(u => u.id !== blockedUser.id));
+                                Alert.alert('Success', 'User unblocked successfully');
+                              } catch (error) {
+                                console.error('Failed to unblock user:', error);
+                                Alert.alert('Error', 'Failed to unblock user');
+                              }
+                            }
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.unblockButtonText, { color: colors.primaryForeground }]}>Unblock</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : (
+              <View style={{ padding: Spacing.lg, alignItems: 'center' }}>
+                <Ionicons name="people" size={40} color={colors.mutedForeground} style={{ opacity: 0.5 }} />
+                <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No blocked users</Text>
+              </View>
+            )}
+          </View>
+        )}
       </Card>
 
       {/* Picker Modal */}
@@ -780,7 +931,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSizes.base,
     minHeight: 80,
   },
-  saveButton: {
+  savePreferencesButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -788,7 +939,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     marginTop: Spacing.lg,
   },
-  saveButtonText: {
+  savePreferencesButtonText: {
     fontSize: Typography.fontSizes.base,
     fontWeight: Typography.fontWeights.semibold,
     marginLeft: Spacing.sm,
@@ -829,5 +980,32 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: Typography.fontSizes.base,
     flex: 1,
+  },
+  blockedUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  blockedUserName: {
+    fontSize: Typography.fontSizes.base,
+    fontWeight: Typography.fontWeights.semibold,
+  },
+  blockedUserUsername: {
+    fontSize: Typography.fontSizes.sm,
+    marginTop: Spacing.xs,
+  },
+  unblockButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  unblockButtonText: {
+    fontSize: Typography.fontSizes.sm,
+    fontWeight: Typography.fontWeights.semibold,
+  },
+  emptyText: {
+    fontSize: Typography.fontSizes.sm,
+    marginTop: Spacing.sm,
   },
 });

@@ -6,10 +6,11 @@ import { supabase } from '@/lib/supabase';
 interface MentionTextProps {
   text: string;
   style?: any;
+  mentionColor?: string;
   onMentionClick?: (userId: string) => void;
 }
 
-export function MentionText({ text, style, onMentionClick }: MentionTextProps) {
+export function MentionText({ text, style, mentionColor = '#007AFF', onMentionClick }: MentionTextProps) {
   const router = useRouter();
 
   // Split text into parts: regular text and @mentions
@@ -34,8 +35,8 @@ export function MentionText({ text, style, onMentionClick }: MentionTextProps) {
       if (onMentionClick) {
         onMentionClick(user.id);
       } else {
-        // Otherwise, could navigate to user profile or show info
-        console.log('Mentioned user:', user.id);
+        // Otherwise navigate to user profile
+        router.push(`/user/${user.id}`);
       }
     } catch (error) {
       console.error('Error looking up mentioned user:', error);
@@ -51,7 +52,7 @@ export function MentionText({ text, style, onMentionClick }: MentionTextProps) {
           return (
             <Text
               key={i}
-              style={styles.mention}
+              style={[styles.mention, { color: mentionColor }]}
               onPress={() => handleMentionClick(username)}
             >
               {part}

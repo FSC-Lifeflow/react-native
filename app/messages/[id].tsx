@@ -20,6 +20,10 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Card } from '@/components/ui/Card';
+import { MentionText } from '@/components/MentionText';
+import { WorkoutInvitationCard } from '@/components/WorkoutInvitationCard';
+import { SendWorkoutInvitationDialog } from '@/components/SendWorkoutInvitationDialog';
 
 interface Participant {
   id: string;
@@ -43,10 +47,17 @@ export default function ChatRoomScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionSuggestions, setMentionSuggestions] = useState<Participant[]>([]);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+  const [showWorkoutInvitationDialog, setShowWorkoutInvitationDialog] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const subscriptionRef = useRef<any>(null);
   const reactionSubscriptionRef = useRef<any>(null);
+
+  const COMMON_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
   useEffect(() => {
     if (chatRoomId) {
@@ -165,6 +176,47 @@ export default function ChatRoomScreen() {
     }
   };
 
+  const handleMessageChange = (text: string) => {
+    setNewMessage(text);
+
+    // Check for @ mentions
+    const lastAtIndex = text.lastIndexOf('@');
+    if (lastAtIndex !== -1) {
+      const textAfterAt = text.substring(lastAtIndex + 1);
+      const hasSpaceAfterAt = textAfterAt.includes(' ');
+      
+      if (!hasSpaceAfterAt) {
+        // User is typing a mention
+        setMentionQuery(textAfterAt.toLowerCase());
+        setShowMentionSuggestions(true);
+        
+        // Filter participants based on query
+        const filtered = participants.filter(p => {
+          const username = p.username.toLowerCase();
+          const firstName = p.first_name?.toLowerCase() || '';
+          const lastName = p.last_name?.toLowerCase() || '';
+          const fullName = `${firstName} ${lastName}`.trim().toLowerCase();
+          
+          return username.includes(textAfterAt.toLowerCase()) ||
+                 fullName.includes(textAfterAt.toLowerCase());
+        });
+        setMentionSuggestions(filtered);
+      } else {
+        setShowMentionSuggestions(false);
+      }
+    } else {
+      setShowMentionSuggestions(false);
+    }
+  };
+
+  const handleMentionSelect = (participant: Participant) => {
+    const lastAtIndex = newMessage.lastIndexOf('@');
+    const textBeforeAt = newMessage.substring(0, lastAtIndex);
+    const newText = `${textBeforeAt}@${participant.username} `;
+    setNewMessage(newText);
+    setShowMentionSuggestions(false);
+  };
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !chatRoomId || isSending) return;
 
@@ -187,12 +239,35 @@ export default function ChatRoomScreen() {
         return [...prev, sentMessage];
       });
       
+      setNewMessage('');
       scrollToBottom();
     } catch (error: any) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleReaction = async (messageId: string, emoji: string) => {
+    try {
+      await messageService.addReaction(messageId, emoji);
+      setShowReactionPicker(null);
+    } catch (error: any) {
+      console.error('Error adding reaction:', error);
+      Alert.alert('Error', 'Failed to add reaction');
+    }
+  };
+
+  const handleSendWorkoutInvitation = async (workoutData: any) => {
+    if (!chatRoomId || typeof chatRoomId !== 'string') return;
+    
+    try {
+      await messageService.sendWorkoutInvitation(chatRoomId, workoutData);
+      scrollToBottom();
+    } catch (error: any) {
+      console.error('Error sending workout invitation:', error);
+      Alert.alert('Error', 'Failed to send workout invitation');
     }
   };
 
@@ -218,6 +293,32 @@ export default function ChatRoomScreen() {
     const isOwnMessage = message.sender_id === user?.id;
     const isDeleted = message.is_deleted;
 
+    // Render workout invitation card
+    if (message.message_type === 'workout_invitation' && message.metadata && !isDeleted) {
+      return (
+        <View
+          key={message.id}
+          style={[
+            styles.messageContainer,
+            styles.workoutInvitationContainer,
+          ]}
+        >
+          <WorkoutInvitationCard
+            messageId={message.id}
+            workoutData={message.metadata}
+            senderId={message.sender_id}
+            senderName={message.sender?.first_name || message.sender?.username || 'Someone'}
+            currentUserId={user?.id || ''}
+            participants={participants}
+          />
+          <Text style={[styles.messageTime, { color: colors.foreground, opacity: 0.5, marginTop: Spacing.xs }]}>
+            {formatTimeAgo(message.created_at)}
+          </Text>
+        </View>
+      );
+    }
+
+    // Render regular text message
     return (
       <View
         key={message.id}
@@ -243,25 +344,82 @@ export default function ChatRoomScreen() {
               {message.sender?.first_name || message.sender?.username}
             </Text>
           )}
-          <View
-            style={[
-              styles.messageBubble,
-              isOwnMessage
-                ? { backgroundColor: colors.tint }
-                : { backgroundColor: colors.card },
-              isDeleted && styles.deletedMessage,
-            ]}
+          <TouchableOpacity
+            onLongPress={() => !isDeleted && setShowReactionPicker(message.id)}
+            activeOpacity={0.9}
           >
-            <Text
+            <View
               style={[
-                styles.messageText,
-                { color: isOwnMessage ? '#fff' : colors.foreground },
-                isDeleted && styles.deletedMessageText,
+                styles.messageBubble,
+                isOwnMessage
+                  ? { backgroundColor: colors.tint }
+                  : { backgroundColor: colors.card },
+                isDeleted && styles.deletedMessage,
               ]}
             >
-              {message.content}
-            </Text>
-          </View>
+              <MentionText
+                text={message.content}
+                style={[
+                  styles.messageText,
+                  { color: isOwnMessage ? '#fff' : colors.foreground },
+                  isDeleted && styles.deletedMessageText,
+                ]}
+                mentionColor={isOwnMessage ? '#E3F2FD' : '#007AFF'}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Reactions */}
+          {((message.reactions && message.reactions.length > 0) || !isDeleted) && (
+            <View style={styles.reactionsContainer}>
+              {message.reactions?.map((reaction, index) => (
+                <TouchableOpacity
+                  key={`${message.id}-${reaction.emoji}-${index}`}
+                  style={[
+                    styles.reactionBubble,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                    reaction.hasReacted && { backgroundColor: colors.tint + '20', borderColor: colors.tint },
+                  ]}
+                  onPress={() => handleReaction(message.id, reaction.emoji)}
+                >
+                  <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+                  <Text style={[styles.reactionCount, { color: reaction.hasReacted ? colors.tint : colors.foreground }]}>
+                    {reaction.count}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {!isDeleted && (
+                <TouchableOpacity
+                  style={[styles.reactionBubble, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setShowReactionPicker(message.id)}
+                >
+                  <Ionicons name="add" size={14} color={colors.foreground} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Reaction Picker */}
+          {showReactionPicker === message.id && (
+            <View style={[styles.reactionPicker, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {COMMON_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={styles.reactionPickerEmoji}
+                  onPress={() => handleReaction(message.id, emoji)}
+                >
+                  <Text style={styles.reactionPickerEmojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.reactionPickerClose}
+                onPress={() => setShowReactionPicker(null)}
+              >
+                <Ionicons name="close" size={16} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <Text style={[styles.messageTime, { color: colors.foreground, opacity: 0.5 }]}>
             {formatTimeAgo(message.created_at)}
             {message.updated_at !== message.created_at && !isDeleted && ' (edited)'}
@@ -306,6 +464,12 @@ export default function ChatRoomScreen() {
               )}
             </View>
           </View>
+          <TouchableOpacity
+            style={styles.workoutButton}
+            onPress={() => setShowWorkoutInvitationDialog(true)}
+          >
+            <Ionicons name="barbell" size={24} color={colors.tint} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -335,15 +499,46 @@ export default function ChatRoomScreen() {
         </ScrollView>
       )}
 
+      {/* Mention Suggestions */}
+      {showMentionSuggestions && mentionSuggestions.length > 0 && (
+        <View style={[styles.mentionSuggestions, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {mentionSuggestions.map((participant) => (
+              <TouchableOpacity
+                key={participant.id}
+                style={[styles.mentionSuggestion, { backgroundColor: colors.background }]}
+                onPress={() => handleMentionSelect(participant)}
+              >
+                {participant.avatar_url ? (
+                  <Image source={{ uri: participant.avatar_url }} style={styles.mentionAvatar} />
+                ) : (
+                  <View style={[styles.mentionAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                    <Ionicons name="person" size={12} color={colors.foreground} />
+                  </View>
+                )}
+                <View style={styles.mentionInfo}>
+                  <Text style={[styles.mentionName, { color: colors.foreground }]} numberOfLines={1}>
+                    {participant.first_name || participant.username}
+                  </Text>
+                  <Text style={[styles.mentionUsername, { color: colors.foreground, opacity: 0.6 }]} numberOfLines={1}>
+                    @{participant.username}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Input */}
       <View style={[styles.inputContainer, { backgroundColor: colors.card, paddingBottom: insets.bottom + 8 }]}>
         <View style={[styles.inputWrapper, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <TextInput
             style={[styles.input, { color: colors.foreground }]}
-            placeholder="Type a message..."
+            placeholder="Type a message... (use @ to mention)"
             placeholderTextColor={colors.foreground + '80'}
             value={newMessage}
-            onChangeText={setNewMessage}
+            onChangeText={handleMessageChange}
             multiline
             maxLength={1000}
           />
@@ -363,6 +558,13 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Send Workout Invitation Dialog */}
+      <SendWorkoutInvitationDialog
+        visible={showWorkoutInvitationDialog}
+        onClose={() => setShowWorkoutInvitationDialog(false)}
+        onSend={handleSendWorkoutInvitation}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -403,6 +605,10 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
+  workoutButton: {
+    padding: Spacing.sm,
+    marginLeft: Spacing.sm,
+  },
   headerTitle: {
     ...Typography.body,
     fontWeight: '600',
@@ -438,6 +644,10 @@ const styles = StyleSheet.create({
   messageContainer: {
     flexDirection: 'row',
     marginBottom: Spacing.md,
+  },
+  workoutInvitationContainer: {
+    flexDirection: 'column',
+    width: '100%',
   },
   ownMessageContainer: {
     justifyContent: 'flex-end',
@@ -505,5 +715,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: Spacing.sm,
+  },
+  mentionSuggestions: {
+    borderTopWidth: 1,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    maxHeight: 80,
+  },
+  mentionSuggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginRight: Spacing.sm,
+    minWidth: 120,
+  },
+  mentionAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: Spacing.sm,
+  },
+  mentionInfo: {
+    flex: 1,
+  },
+  mentionName: {
+    ...Typography.body,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  mentionUsername: {
+    ...Typography.caption,
+    fontSize: 11,
+  },
+  reactionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: Spacing.xs,
+    gap: Spacing.xs,
+  },
+  reactionBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    gap: 4,
+  },
+  reactionEmoji: {
+    fontSize: 14,
+  },
+  reactionCount: {
+    ...Typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  reactionPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    marginTop: Spacing.xs,
+    gap: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  reactionPickerEmoji: {
+    padding: Spacing.xs,
+  },
+  reactionPickerEmojiText: {
+    fontSize: 24,
+  },
+  reactionPickerClose: {
+    padding: Spacing.xs,
+    marginLeft: 'auto',
   },
 });

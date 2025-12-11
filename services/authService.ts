@@ -379,6 +379,192 @@ export const authService = {
   },
 
   /**
+   * Uploads a user avatar image to Supabase Storage and updates the user's avatar_url
+   * @param userId - ID of the user
+   * @param fileUri - Local file URI from the image picker
+   * @returns The public URL of the uploaded avatar
+   */
+  async uploadAvatar(userId: string, fileUri: string): Promise<string> {
+    try {
+      if (!userId) throw new Error('Missing userId');
+      if (!fileUri) throw new Error('No file provided');
+
+      console.log('📤 Starting avatar upload for user:', userId);
+      console.log('📁 File URI:', fileUri);
+
+      // Clean up old avatars for this user (optional, to save space)
+      try {
+        console.log('🧹 Cleaning up old avatars...');
+        const { data: oldFiles, error: listError } = await supabase.storage
+          .from('avatars')
+          .list(userId);
+        
+        if (!listError && oldFiles && oldFiles.length > 0) {
+          const filesToDelete = oldFiles.map(file => `${userId}/${file.name}`);
+          console.log('🗑️ Deleting old files:', filesToDelete);
+          
+          const { error: deleteError } = await supabase.storage
+            .from('avatars')
+            .remove(filesToDelete);
+          
+          if (deleteError) {
+            console.warn('⚠️ Failed to delete old avatars:', deleteError);
+          } else {
+            console.log('✅ Old avatars cleaned up');
+          }
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Cleanup failed, continuing with upload:', cleanupError);
+      }
+
+      // Get file extension from URI
+      const fileExt = fileUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+
+      // For React Native, read the file as base64 and convert to ArrayBuffer
+      // This is more reliable than using blob which can result in 0 byte uploads
+      console.log('📥 Reading file from URI...');
+      
+      // Use fetch to get the file as ArrayBuffer
+      const response = await fetch(fileUri);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+      }
+      
+      // Get as ArrayBuffer instead of blob
+      const arrayBuffer = await response.arrayBuffer();
+      const fileSize = arrayBuffer.byteLength;
+      
+      console.log('📦 File details:');
+      console.log('  - Size:', fileSize, 'bytes', `(${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
+      console.log('  - Extension:', fileExt);
+      
+      if (fileSize === 0) {
+        throw new Error('File is empty (0 bytes). Please try selecting a different image.');
+      }
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        throw new Error(`File is too large (${(fileSize / 1024 / 1024).toFixed(2)}MB). Maximum is 10MB.`);
+      }
+
+      console.log('📤 Uploading to path:', filePath);
+      console.log('📤 Content type:', `image/${fileExt}`);
+
+      // Upload using ArrayBuffer which is more reliable in React Native
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, arrayBuffer, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: `image/${fileExt}`,
+        });
+      
+      console.log('📤 Upload response:', uploadData);
+
+      if (uploadError) {
+        console.error('❌ Avatar upload failed:', uploadError);
+        throw new Error(uploadError.message);
+      }
+
+      console.log('✅ File uploaded successfully');
+
+      // Verify the file exists in storage
+      console.log('🔍 Verifying file exists in storage...');
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('avatars')
+        .list(userId, {
+          limit: 100,
+          offset: 0,
+          sortBy: { column: 'created_at', order: 'desc' }
+        });
+      
+      if (listError) {
+        console.warn('⚠️ Could not verify file in storage:', listError);
+      } else {
+        console.log('📁 Files in user folder:', fileList?.map(f => f.name));
+        const fileExists = fileList?.some(f => f.name === fileName);
+        console.log('✅ File exists in storage:', fileExists);
+        
+        if (!fileExists) {
+          throw new Error('File upload succeeded but file not found in storage. Please try again.');
+        }
+      }
+
+      // Get public URL
+      const { data: publicData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      const publicUrl = publicData.publicUrl;
+
+      console.log('🔗 Public URL generated:', publicUrl);
+      console.log('🔗 URL structure check:');
+      console.log('  - Starts with http:', publicUrl.startsWith('http'));
+      console.log('  - Contains /storage/v1/object/public/:', publicUrl.includes('/storage/v1/object/public/'));
+      console.log('  - Full URL:', publicUrl);
+
+      // Test if the URL is accessible
+      console.log('🧪 Testing URL accessibility...');
+      try {
+        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+        console.log('🧪 URL test status:', testResponse.status);
+        console.log('🧪 Response headers:', Object.fromEntries(testResponse.headers.entries()));
+        
+        if (!testResponse.ok) {
+          console.error('❌ URL is not accessible! Status:', testResponse.status);
+          
+          if (testResponse.status === 404) {
+            throw new Error('File not found in storage (404). The upload may have failed silently.');
+          } else if (testResponse.status === 403) {
+            throw new Error('Access denied (403). The avatars bucket must be set to public in Supabase Dashboard.');
+          } else {
+            throw new Error(`URL returned status ${testResponse.status}. Please check Supabase Storage settings.`);
+          }
+        } else {
+          console.log('✅ URL is accessible!');
+        }
+      } catch (testError) {
+        console.error('❌ Failed to test URL:', testError);
+        throw testError;
+      }
+
+      // Update user record
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', userId);
+
+      if (updateError) {
+        console.error('❌ Failed to update avatar_url on user:', updateError);
+        throw new Error('Failed to save avatar.');
+      }
+
+      console.log('✅ Avatar URL updated in database');
+      return publicUrl;
+    } catch (error) {
+      console.error('❌ Avatar upload error:', error);
+      throw error as Error;
+    }
+  },
+
+  /**
+   * Test if an avatar URL is accessible
+   */
+  async testAvatarUrl(url: string): Promise<boolean> {
+    try {
+      console.log('🧪 Testing avatar URL:', url);
+      const response = await fetch(url, { method: 'HEAD' });
+      console.log('🧪 Response status:', response.status);
+      console.log('🧪 Response headers:', JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2));
+      return response.ok;
+    } catch (error) {
+      console.error('🧪 URL test failed:', error);
+      return false;
+    }
+  },
+
+  /**
    * Updates a user's profile information
    */
   async updateUserProfile(userId: string, updates: Partial<User>) {

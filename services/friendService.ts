@@ -60,6 +60,23 @@ export type UserSearchResult = {
 };
 
 /**
+ * Blocked user data structure
+ */
+export type BlockedUser = {
+  id: string;
+  blocked_id: string;
+  created_at: string;
+  user: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    username: string;
+    email: string;
+    avatar_url?: string;
+  };
+};
+
+/**
  * Friend Service
  * Handles all friend-related operations
  */
@@ -180,6 +197,18 @@ export const friendService = {
   async sendFriendRequest(receiverId: string): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
+
+    // Check if the current user is blocked by the receiver
+    const isBlocked = await this.isBlockedByUser(receiverId);
+    if (isBlocked) {
+      throw new Error('You cannot send a friend request to this user');
+    }
+
+    // Check if the current user has blocked the receiver
+    const hasBlocked = await this.isUserBlocked(receiverId);
+    if (hasBlocked) {
+      throw new Error('You cannot send a friend request to a user you have blocked');
+    }
 
     // Check if request already exists
     const { data: existingRequests } = await supabase
@@ -351,5 +380,224 @@ export const friendService = {
 
     if (error) throw error;
     return count || 0;
+  },
+
+  /**
+   * Blocks a user, preventing them from sending friend requests
+   */
+  async blockUser(userId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    // Check if already blocked
+    const { data: existingBlock, error: checkError } = await supabase
+      .from('user_blocks')
+      .select('*')
+      .eq('blocker_id', user.id)
+      .eq('blocked_id', userId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw new Error(`Error checking block status: ${checkError.message}`);
+    }
+
+    if (existingBlock) {
+      throw new Error('User is already blocked');
+    }
+
+    // Create the block
+    const { error } = await supabase
+      .from('user_blocks')
+      .insert([
+        {
+          blocker_id: user.id,
+          blocked_id: userId,
+        },
+      ]);
+
+    if (error) {
+      throw new Error(`Failed to block user: ${error.message}`);
+    }
+
+    // Reject any pending friend requests from the blocked user
+    await supabase
+      .from('friend_requests')
+      .update({ status: 'rejected' })
+      .eq('sender_id', userId)
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending');
+  },
+
+  /**
+   * Unblocks a user
+   */
+  async unblockUser(userId: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const { error } = await supabase
+      .from('user_blocks')
+      .delete()
+      .eq('blocker_id', user.id)
+      .eq('blocked_id', userId);
+
+    if (error) {
+      throw new Error(`Failed to unblock user: ${error.message}`);
+    }
+  },
+
+  /**
+   * Checks if a user is blocked by the current user
+   */
+  async isUserBlocked(userId: string): Promise<boolean> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', user.id)
+        .eq('blocked_id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking block status:', error);
+        return false;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('Error checking if user is blocked:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Gets a list of users blocked by the current user
+   */
+  async getBlockedUsers(): Promise<BlockedUser[]> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('user_blocks')
+        .select('id, blocked_id, created_at')
+        .eq('blocker_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw new Error(`Failed to get blocked users: ${error.message}`);
+      }
+
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      // Get user details for each blocked user
+      const blockedUserIds = data.map(block => block.blocked_id);
+      const { data: blockedUsers, error: userError } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, username, email, avatar_url')
+        .in('id', blockedUserIds);
+
+      if (userError) {
+        throw new Error(`Failed to fetch user details: ${userError.message}`);
+      }
+
+      // Combine the block data with user details
+      return data.map(block => {
+        const user = blockedUsers?.find(u => u.id === block.blocked_id) || {
+          id: block.blocked_id,
+          first_name: 'Unknown',
+          last_name: 'User',
+          username: 'unknown',
+          email: 'No email',
+          avatar_url: undefined
+        };
+
+        return {
+          id: block.id,
+          blocked_id: block.blocked_id,
+          created_at: block.created_at,
+          user
+        };
+      });
+    } catch (error) {
+      console.error('Error getting blocked users:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Checks if the current user is blocked by another user
+   */
+  async isBlockedByUser(userId: string): Promise<boolean> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('user_blocks')
+        .select('id')
+        .eq('blocker_id', userId)
+        .eq('blocked_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking if blocked by user:', error);
+        return false;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('Error checking if blocked by user:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Get all friends for a specific user (for viewing friend's profile)
+   */
+  async getFriendsOfUser(userId: string): Promise<Friend[]> {
+    try {
+      // Get all accepted friend requests where the specified user is either sender or receiver
+      const { data: friendRequests, error } = await supabase
+        .from('friend_requests')
+        .select('sender_id, receiver_id')
+        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+        .eq('status', 'accepted');
+
+      if (error) {
+        console.error('Failed to get friend requests:', error);
+        throw new Error('Failed to get friends');
+      }
+
+      if (!friendRequests || friendRequests.length === 0) {
+        return [];
+      }
+
+      // Extract friend IDs (the other person in each relationship)
+      const friendIds = friendRequests.map(request => 
+        request.sender_id === userId ? request.receiver_id : request.sender_id
+      );
+
+      // Get user information for all friends
+      const { data: friends, error: friendsError } = await supabase
+        .from('users')
+        .select('id, username, first_name, last_name, email, avatar_url, created_at')
+        .in('id', friendIds);
+
+      if (friendsError) {
+        console.error('Failed to get friends info:', friendsError);
+        throw new Error('Failed to get friends information');
+      }
+
+      return friends || [];
+    } catch (error) {
+      console.error('Get friends of user error:', error);
+      throw error;
+    }
   },
 };

@@ -314,41 +314,90 @@ export const postService = {
    */
   async uploadImage(imageUri: string, userId: string): Promise<string> {
     try {
-      // Read the file as base64
-      const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: 'base64',
-      });
+      console.log('📤 Starting image upload:', imageUri);
+
+      // Use fetch with ArrayBuffer instead of blob to avoid 0-byte uploads in React Native
+      console.log('📥 Reading file from URI...');
+      const response = await fetch(imageUri);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+      }
+      
+      // Get as ArrayBuffer instead of blob
+      const arrayBuffer = await response.arrayBuffer();
+      const fileSize = arrayBuffer.byteLength;
+      
+      console.log('📦 File details:');
+      console.log('  - Size:', fileSize, 'bytes', `(${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
+      
+      if (fileSize === 0) {
+        throw new Error('File is empty (0 bytes). Please try selecting a different image.');
+      }
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        throw new Error(`File is too large (${(fileSize / 1024 / 1024).toFixed(2)}MB). Maximum is 10MB.`);
+      }
 
       // Get file extension from URI
-      const fileExt = imageUri.split('.').pop() || 'jpg';
+      const fileExt = imageUri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
       const fileName = `${userId}/${Date.now()}.${fileExt}`;
+      
+      console.log('📝 Uploading as:', fileName);
+      console.log('📝 Content type:', `image/${fileExt}`);
 
-      // Convert base64 to blob
-      const response = await fetch(`data:image/${fileExt};base64,${base64}`);
-      const blob = await response.blob();
-
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage using ArrayBuffer
       const { data, error } = await supabase.storage
         .from('post-images')
-        .upload(fileName, blob, {
+        .upload(fileName, arrayBuffer, {
           cacheControl: '3600',
           upsert: false,
           contentType: `image/${fileExt}`,
         });
 
       if (error) {
-        console.error('Image upload error:', error);
+        console.error('❌ Image upload error:', error);
         throw new Error(`Failed to upload image: ${error.message}`);
       }
+
+      console.log('✅ File uploaded successfully');
+      console.log('📤 Upload response:', data);
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('post-images')
         .getPublicUrl(fileName);
 
+      console.log('🔗 Public URL generated:', publicUrl);
+
+      // Test if the URL is accessible
+      console.log('🧪 Testing URL accessibility...');
+      try {
+        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+        console.log('🧪 URL test status:', testResponse.status);
+        
+        if (!testResponse.ok) {
+          console.error('❌ URL is not accessible! Status:', testResponse.status);
+          
+          if (testResponse.status === 404) {
+            throw new Error('Image not found in storage (404). The upload may have failed silently.');
+          } else if (testResponse.status === 403) {
+            throw new Error('Access denied (403). The post-images bucket must be set to public in Supabase Dashboard.');
+          } else {
+            throw new Error(`URL returned status ${testResponse.status}. Please check Supabase Storage settings.`);
+          }
+        } else {
+          console.log('✅ URL is accessible!');
+        }
+      } catch (testError) {
+        console.error('❌ Failed to test URL:', testError);
+        throw testError;
+      }
+
+      console.log('✅ Image uploaded successfully:', publicUrl);
       return publicUrl;
     } catch (error) {
-      console.error('Image upload failed:', error);
+      console.error('❌ Image upload failed:', error);
       throw error;
     }
   },
@@ -372,8 +421,16 @@ export const postService = {
 
       // Upload image if provided
       if (imageUri) {
+        console.log('📸 Uploading image for post...');
         imageUrl = await this.uploadImage(imageUri, currentUser.id);
+        console.log('✅ Image URL received:', imageUrl);
       }
+
+      console.log('📝 Creating post with data:', { 
+        content: content.trim(), 
+        imageUrl,
+        hasImage: !!imageUrl 
+      });
 
       // Create post in database
       const { data, error } = await supabase

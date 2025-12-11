@@ -1,5 +1,7 @@
 import { Card } from '@/components/ui/Card';
-import { BorderRadius, Colors, Spacing } from '@/constants/theme';
+import { MentionText } from '@/components/MentionText';
+import { MentionTextarea } from '@/components/MentionTextarea';
+import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFriends } from '@/hooks/useFriends';
@@ -10,6 +12,7 @@ import { CalendarEvent, googleCalendarService } from '@/services/googleCalendarS
 import { motivationService } from '@/services/motivationService';
 import { notificationService } from '@/services/notificationService';
 import { PostComment, postService } from '@/services/postService';
+import { postInteractionService } from '@/services/postInteractionService';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
@@ -28,12 +31,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   
   const { posts, isLoading, refetch } = useFriendPosts();
   const { createPost, isCreating } = useCreatePost();
@@ -65,16 +70,6 @@ export default function FeedScreen() {
   // Challenge workout states
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   
-  // Comments states
-  const [showCommentsModal, setShowCommentsModal] = useState(false);
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
-  const [comments, setComments] = useState<PostComment[]>([]);
-  const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [newComment, setNewComment] = useState('');
-  const [isAddingComment, setIsAddingComment] = useState(false);
-  const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string } | null>(null);
-  const [newReply, setNewReply] = useState('');
-  const [isAddingReply, setIsAddingReply] = useState(false);
   const [challengeStep, setChallengeStep] = useState(1);
   const [challengeTimeOption, setChallengeTimeOption] = useState<'set' | 'flexible'>('set');
   const [challengeWorkoutForm, setChallengeWorkoutForm] = useState('');
@@ -83,6 +78,20 @@ export default function FeedScreen() {
   const [challengeNote, setChallengeNote] = useState('');
   const [selectedChallengeFriends, setSelectedChallengeFriends] = useState<Friend[]>([]);
   const [isSendingChallenges, setIsSendingChallenges] = useState(false);
+  
+  // Comments states
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [postComments, setPostComments] = useState<Map<string, PostComment[]>>(new Map());
+  const [commentText, setCommentText] = useState<Map<string, string>>(new Map());
+  const [loadingComments, setLoadingComments] = useState<Set<string>>(new Set());
+  const [submittingComment, setSubmittingComment] = useState<Set<string>>(new Set());
+  
+  // Reply states
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const [commentReplies, setCommentReplies] = useState<Map<string, any[]>>(new Map());
+  const [replyText, setReplyText] = useState<Map<string, string>>(new Map());
+  const [loadingReplies, setLoadingReplies] = useState<Set<string>>(new Set());
+  const [submittingReply, setSubmittingReply] = useState<Set<string>>(new Set());
   
   const { friends } = useFriends();
   const { isAuthenticated: isCalendarConnected } = useGoogleCalendar();
@@ -129,6 +138,186 @@ export default function FeedScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => deletePost(postId) },
+      ]
+    );
+  };
+
+  const toggleComments = async (postId: string) => {
+    const newExpanded = new Set(expandedComments);
+    
+    if (newExpanded.has(postId)) {
+      newExpanded.delete(postId);
+    } else {
+      newExpanded.add(postId);
+      // Load comments if not already loaded
+      if (!postComments.has(postId)) {
+        const newLoading = new Set(loadingComments);
+        newLoading.add(postId);
+        setLoadingComments(newLoading);
+        try {
+          const comments = await postInteractionService.getPostComments(postId);
+          setPostComments(new Map(postComments).set(postId, comments));
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load comments');
+        } finally {
+          const updatedLoading = new Set(loadingComments);
+          updatedLoading.delete(postId);
+          setLoadingComments(updatedLoading);
+        }
+      }
+    }
+    
+    setExpandedComments(newExpanded);
+  };
+
+  const handleAddComment = async (postId: string) => {
+    const text = commentText.get(postId);
+    if (!text?.trim()) return;
+    
+    const newSubmitting = new Set(submittingComment);
+    newSubmitting.add(postId);
+    setSubmittingComment(newSubmitting);
+    try {
+      const newComment = await postInteractionService.createComment(postId, text);
+      
+      // Add comment to local state
+      const currentComments = postComments.get(postId) || [];
+      setPostComments(new Map(postComments).set(postId, [...currentComments, newComment]));
+      
+      // Clear input
+      const newCommentText = new Map(commentText);
+      newCommentText.delete(postId);
+      setCommentText(newCommentText);
+      
+      // Refresh posts to update comment count
+      refetch();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add comment');
+    } finally {
+      const updatedSubmitting = new Set(submittingComment);
+      updatedSubmitting.delete(postId);
+      setSubmittingComment(updatedSubmitting);
+    }
+  };
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await postInteractionService.deleteComment(commentId);
+              
+              // Remove from local state
+              const currentComments = postComments.get(postId) || [];
+              setPostComments(
+                new Map(postComments).set(
+                  postId,
+                  currentComments.filter(c => c.id !== commentId)
+                )
+              );
+              
+              refetch();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete comment');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const toggleReplies = async (commentId: string) => {
+    const newExpanded = new Set(expandedReplies);
+    
+    if (newExpanded.has(commentId)) {
+      newExpanded.delete(commentId);
+    } else {
+      newExpanded.add(commentId);
+      // Load replies if not already loaded
+      if (!commentReplies.has(commentId)) {
+        const newLoading = new Set(loadingReplies);
+        newLoading.add(commentId);
+        setLoadingReplies(newLoading);
+        try {
+          const replies = await postInteractionService.getCommentReplies(commentId);
+          setCommentReplies(new Map(commentReplies).set(commentId, replies));
+        } catch (error) {
+          Alert.alert('Error', 'Failed to load replies');
+        } finally {
+          const updatedLoading = new Set(loadingReplies);
+          updatedLoading.delete(commentId);
+          setLoadingReplies(updatedLoading);
+        }
+      }
+    }
+    
+    setExpandedReplies(newExpanded);
+  };
+
+  const handleAddReply = async (commentId: string) => {
+    const text = replyText.get(commentId);
+    if (!text?.trim()) return;
+    
+    const newSubmitting = new Set(submittingReply);
+    newSubmitting.add(commentId);
+    setSubmittingReply(newSubmitting);
+    try {
+      const newReply = await postInteractionService.createReply(commentId, text);
+      
+      // Add reply to local state
+      const currentReplies = commentReplies.get(commentId) || [];
+      setCommentReplies(new Map(commentReplies).set(commentId, [...currentReplies, newReply]));
+      
+      // Clear input
+      const newReplyText = new Map(replyText);
+      newReplyText.delete(commentId);
+      setReplyText(newReplyText);
+      
+      // Refresh to update reply counts
+      refetch();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add reply');
+    } finally {
+      const updatedSubmitting = new Set(submittingReply);
+      updatedSubmitting.delete(commentId);
+      setSubmittingReply(updatedSubmitting);
+    }
+  };
+
+  const handleDeleteReply = async (commentId: string, replyId: string) => {
+    Alert.alert(
+      'Delete Reply',
+      'Are you sure you want to delete this reply?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await postInteractionService.deleteReply(replyId);
+              
+              // Remove from local state
+              const currentReplies = commentReplies.get(commentId) || [];
+              setCommentReplies(
+                new Map(commentReplies).set(
+                  commentId,
+                  currentReplies.filter(r => r.id !== replyId)
+                )
+              );
+              
+              refetch();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete reply');
+            }
+          },
+        },
       ]
     );
   };
@@ -393,131 +582,6 @@ export default function FeedScreen() {
     }
   };
 
-  const handleOpenComments = async (postId: string) => {
-    setSelectedPostId(postId);
-    setShowCommentsModal(true);
-    setIsLoadingComments(true);
-    
-    try {
-      const fetchedComments = await postService.getComments(postId);
-      setComments(fetchedComments);
-    } catch (error: any) {
-      console.error('Error loading comments:', error);
-      Alert.alert('Error', 'Failed to load comments');
-    } finally {
-      setIsLoadingComments(false);
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !selectedPostId) return;
-    
-    setIsAddingComment(true);
-    try {
-      const comment = await postService.addComment(selectedPostId, newComment);
-      setComments(prev => [...prev, comment]);
-      setNewComment('');
-      // Refresh posts to update comment count
-      refetch();
-    } catch (error: any) {
-      console.error('Error adding comment:', error);
-      Alert.alert('Error', error.message || 'Failed to add comment');
-    } finally {
-      setIsAddingComment(false);
-    }
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-    Alert.alert(
-      'Delete Comment',
-      'Are you sure you want to delete this comment?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await postService.deleteComment(commentId);
-              setComments(prev => prev.filter(c => c.id !== commentId));
-              refetch();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete comment');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleAddReply = async (commentId: string) => {
-    if (!newReply.trim()) return;
-    
-    setIsAddingReply(true);
-    try {
-      const reply = await postService.addReply(commentId, newReply);
-      setComments(prev => prev.map(c => {
-        if (c.id === commentId) {
-          return {
-            ...c,
-            replies: [...(c.replies || []), reply],
-            replies_count: (c.replies_count || 0) + 1
-          };
-        }
-        return c;
-      }));
-      setNewReply('');
-      setReplyingTo(null);
-      refetch();
-    } catch (error: any) {
-      console.error('Error adding reply:', error);
-      Alert.alert('Error', error.message || 'Failed to add reply');
-    } finally {
-      setIsAddingReply(false);
-    }
-  };
-
-  const handleDeleteReply = async (replyId: string, commentId: string) => {
-    Alert.alert(
-      'Delete Reply',
-      'Are you sure you want to delete this reply?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await postService.deleteReply(replyId);
-              setComments(prev => prev.map(c => {
-                if (c.id === commentId) {
-                  return {
-                    ...c,
-                    replies: (c.replies || []).filter(r => r.id !== replyId),
-                    replies_count: Math.max((c.replies_count || 0) - 1, 0)
-                  };
-                }
-                return c;
-              }));
-              refetch();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to delete reply');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const closeCommentsModal = () => {
-    setShowCommentsModal(false);
-    setSelectedPostId(null);
-    setComments([]);
-    setNewComment('');
-    setReplyingTo(null);
-    setNewReply('');
-  };
-
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -534,7 +598,11 @@ export default function FeedScreen() {
     <Card key={post.id} style={styles.postCard}>
       {/* Post Header */}
       <View style={styles.postHeader}>
-        <View style={styles.userInfo}>
+        <TouchableOpacity 
+          style={styles.userInfo}
+          onPress={() => router.push(`/user/${post.user_id}` as any)}
+          activeOpacity={0.7}
+        >
           {post.user?.avatar_url ? (
             <Image source={{ uri: post.user.avatar_url }} style={styles.avatar} />
           ) : (
@@ -550,7 +618,7 @@ export default function FeedScreen() {
               {formatTimeAgo(post.created_at)}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
         {post.user_id === user?.id && (
           <TouchableOpacity onPress={() => handleDeletePost(post.id)} disabled={isDeleting}>
             <Ionicons name="trash-outline" size={20} color="#ff3b30" />
@@ -558,9 +626,13 @@ export default function FeedScreen() {
         )}
       </View>
 
-      {/* Post Content */}
+      {/* Post Content with @mention support */}
       {post.content && (
-        <Text style={[styles.postContent, { color: colors.foreground }]}>{post.content}</Text>
+        <MentionText 
+          text={post.content} 
+          style={[styles.postContent, { color: colors.foreground }]}
+          mentionColor={colors.tint}
+        />
       )}
 
       {/* Post Image */}
@@ -584,10 +656,7 @@ export default function FeedScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => handleOpenComments(post.id)}
-        >
+        <TouchableOpacity style={styles.actionButton}>
           <Ionicons name="chatbubble-outline" size={22} color={colors.foreground} />
           <Text style={[styles.actionText, { color: colors.foreground }]}>
             {post.comments_count || 0}
@@ -598,6 +667,136 @@ export default function FeedScreen() {
           <Ionicons name="share-outline" size={24} color={colors.foreground} />
         </TouchableOpacity>
       </View>
+
+      {/* Comments Section */}
+      {expandedComments.has(post.id) && (
+        <View style={styles.commentsSection}>
+          {loadingComments.has(post.id) ? (
+            <ActivityIndicator color={colors.tint} style={{ marginVertical: Spacing.md }} />
+          ) : (
+            <>
+              {/* Comments List */}
+              {(postComments.get(post.id) || []).map((comment) => (
+                <View key={comment.id} style={[styles.commentItem, { borderBottomColor: colors.border }]}>
+                  <TouchableOpacity 
+                    onPress={() => router.push(`/user/${comment.user_id}` as any)}
+                  >
+                    <Text style={[styles.commentAuthor, { color: colors.tint }]}>{comment.user?.first_name} {comment.user?.last_name}</Text>
+                  </TouchableOpacity>
+                  <MentionText 
+                    text={comment.content} 
+                    style={[styles.commentText, { color: colors.foreground }]}
+                    mentionColor={colors.tint}
+                  />
+                  <View style={styles.commentMeta}>
+                    <Text style={[styles.commentTime, { color: colors.subtext }]}>{formatTimeAgo(comment.created_at)}</Text>
+                    <TouchableOpacity
+                      onPress={() => toggleReplies(comment.id)}
+                      style={{ marginLeft: Spacing.md }}
+                    >
+                      <Text style={[styles.replyButton, { color: colors.tint }]}>{comment.replies_count || 0} {comment.replies_count === 1 ? 'reply' : 'replies'}</Text>
+                    </TouchableOpacity>
+                    {comment.user_id === user?.id && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteComment(post.id, comment.id)}
+                        style={{ marginLeft: Spacing.md }}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#ff3b30" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Replies Section */}
+                  {expandedReplies.has(comment.id) && (
+                    <View style={styles.repliesSection}>
+                      {loadingReplies.has(comment.id) ? (
+                        <ActivityIndicator color={colors.tint} size="small" style={{ marginVertical: Spacing.sm }} />
+                      ) : (
+                        <>
+                          {/* Replies List */}
+                          {(commentReplies.get(comment.id) || []).map((reply) => (
+                            <View key={reply.id} style={styles.replyItem}>
+                              <TouchableOpacity 
+                                onPress={() => router.push(`/user/${reply.user_id}` as any)}
+                              >
+                                <Text style={[styles.replyAuthor, { color: colors.tint }]}>{reply.user?.first_name} {reply.user?.last_name}</Text>
+                              </TouchableOpacity>
+                              <MentionText 
+                                text={reply.content} 
+                                style={[styles.replyText, { color: colors.foreground }]}
+                                mentionColor={colors.tint}
+                              />
+                              <View style={styles.replyMeta}>
+                                <Text style={[styles.replyTime, { color: colors.subtext }]}>{formatTimeAgo(reply.created_at)}</Text>
+                                {reply.user_id === user?.id && (
+                                  <TouchableOpacity
+                                    onPress={() => handleDeleteReply(comment.id, reply.id)}
+                                    style={{ marginLeft: Spacing.sm }}
+                                  >
+                                    <Ionicons name="trash-outline" size={12} color="#ff3b30" />
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            </View>
+                          ))}
+                          
+                          {/* Add Reply Input */}
+                          <View style={styles.addReplyContainer}>
+                            <MentionTextarea
+                              value={replyText.get(comment.id) || ''}
+                              onChange={(text) => {
+                                const newReplyText = new Map(replyText);
+                                newReplyText.set(comment.id, text);
+                                setReplyText(newReplyText);
+                              }}
+                              placeholder="Add a reply..."
+                            />
+                            <TouchableOpacity
+                              style={[styles.sendReplyButton, { backgroundColor: colors.tint }]}
+                              onPress={() => handleAddReply(comment.id)}
+                              disabled={submittingReply.has(comment.id) || !replyText.get(comment.id)?.trim()}
+                            >
+                              {submittingReply.has(comment.id) ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                              ) : (
+                                <Ionicons name="send" size={16} color="#fff" />
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))}
+              
+              {/* Add Comment Input */}
+              <View style={styles.addCommentContainer}>
+                <MentionTextarea
+                  value={commentText.get(post.id) || ''}
+                  onChange={(text) => {
+                    const newCommentText = new Map(commentText);
+                    newCommentText.set(post.id, text);
+                    setCommentText(newCommentText);
+                  }}
+                  placeholder="Add a comment..."
+                />
+                <TouchableOpacity
+                  style={[styles.sendCommentButton, { backgroundColor: colors.tint }]}
+                  onPress={() => handleAddComment(post.id)}
+                  disabled={submittingComment.has(post.id) || !commentText.get(post.id)?.trim()}
+                >
+                  {submittingComment.has(post.id) ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="send" size={18} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+      )}
     </Card>
   );
 
@@ -659,12 +858,21 @@ export default function FeedScreen() {
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalKeyboardView}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
           >
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
               <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                  <Ionicons name="close" size={28} color={colors.foreground} />
-                </TouchableOpacity>
+                <View style={styles.modalHeaderLeft}>
+                  <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                    <Ionicons name="close" size={28} color={colors.foreground} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={handlePickImage}
+                    style={styles.headerImageButton}
+                  >
+                    <Ionicons name="image-outline" size={28} color={colors.tint} />
+                  </TouchableOpacity>
+                </View>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create Post</Text>
                 <TouchableOpacity
                   onPress={handleCreatePost}
@@ -684,18 +892,15 @@ export default function FeedScreen() {
 
               <ScrollView 
                 style={styles.modalScroll} 
+                contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                <TextInput
-                  style={[styles.textInput, { color: colors.foreground, borderColor: colors.border }]}
-                  placeholder="What's on your mind?"
-                  placeholderTextColor={colors.foreground + '80'}
+                <MentionTextarea
                   value={newPostContent}
-                  onChangeText={setNewPostContent}
-                  multiline
+                  onChange={setNewPostContent}
+                  placeholder="What's on your mind?"
                   maxLength={500}
-                  autoFocus
                 />
 
                 {selectedImage && (
@@ -709,11 +914,6 @@ export default function FeedScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-
-                <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickImage}>
-                  <Ionicons name="image-outline" size={24} color={colors.tint} />
-                  <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
-                </TouchableOpacity>
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
@@ -1393,196 +1593,6 @@ export default function FeedScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
-
-      {/* Comments Modal */}
-      <Modal
-        visible={showCommentsModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={closeCommentsModal}
-      >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={styles.modalBackdrop} 
-            activeOpacity={1} 
-            onPress={closeCommentsModal}
-          />
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalKeyboardView}
-          >
-            <View style={[styles.commentsModalContent, { backgroundColor: colors.card }]}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={closeCommentsModal}>
-                  <Ionicons name="close" size={28} color={colors.foreground} />
-                </TouchableOpacity>
-                <Text style={[styles.modalTitle, { color: colors.foreground }]}>Comments</Text>
-                <View style={{ width: 28 }} />
-              </View>
-
-              <ScrollView 
-                style={styles.commentsScrollView} 
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                {isLoadingComments ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={colors.tint} />
-                    <Text style={[styles.loadingText, { color: colors.foreground }]}>
-                      Loading comments...
-                    </Text>
-                  </View>
-                ) : comments.length === 0 ? (
-                  <View style={styles.emptyCommentsState}>
-                    <Ionicons name="chatbubble-outline" size={48} color={colors.foreground} style={{ opacity: 0.3 }} />
-                    <Text style={[styles.emptyText, { color: colors.foreground, fontSize: 16 }]}>
-                      No comments yet
-                    </Text>
-                    <Text style={[styles.emptySubtext, { color: colors.foreground, opacity: 0.6 }]}>
-                      Be the first to comment!
-                    </Text>
-                  </View>
-                ) : (
-                  comments.map((comment) => (
-                    <View key={comment.id} style={styles.commentContainer}>
-                      <View style={styles.commentHeader}>
-                        {comment.user?.avatar_url ? (
-                          <Image source={{ uri: comment.user.avatar_url }} style={styles.commentAvatar} />
-                        ) : (
-                          <View style={[styles.commentAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
-                            <Ionicons name="person" size={14} color={colors.foreground} />
-                          </View>
-                        )}
-                        <View style={styles.commentUserInfo}>
-                          <Text style={[styles.commentUserName, { color: colors.foreground }]}>
-                            {comment.user?.first_name} {comment.user?.last_name}
-                          </Text>
-                          <Text style={[styles.commentTime, { color: colors.foreground, opacity: 0.5 }]}>
-                            {formatTimeAgo(comment.created_at)}
-                          </Text>
-                        </View>
-                        {comment.user_id === user?.id && (
-                          <TouchableOpacity onPress={() => handleDeleteComment(comment.id)}>
-                            <Ionicons name="trash-outline" size={16} color="#ff3b30" />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                      <Text style={[styles.commentContent, { color: colors.foreground }]}>
-                        {comment.content}
-                      </Text>
-                      <TouchableOpacity 
-                        style={styles.replyButton}
-                        onPress={() => setReplyingTo({ commentId: comment.id, userName: `${comment.user?.first_name || 'User'}` })}
-                      >
-                        <Ionicons name="arrow-undo-outline" size={14} color={colors.tint} />
-                        <Text style={[styles.replyButtonText, { color: colors.tint }]}>Reply</Text>
-                      </TouchableOpacity>
-
-                      {/* Replies */}
-                      {comment.replies && comment.replies.length > 0 && (
-                        <View style={styles.repliesContainer}>
-                          {comment.replies.map((reply) => (
-                            <View key={reply.id} style={styles.replyItem}>
-                              <View style={styles.commentHeader}>
-                                {reply.user?.avatar_url ? (
-                                  <Image source={{ uri: reply.user.avatar_url }} style={styles.replyAvatar} />
-                                ) : (
-                                  <View style={[styles.replyAvatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
-                                    <Ionicons name="person" size={10} color={colors.foreground} />
-                                  </View>
-                                )}
-                                <View style={styles.commentUserInfo}>
-                                  <Text style={[styles.replyUserName, { color: colors.foreground }]}>
-                                    {reply.user?.first_name} {reply.user?.last_name}
-                                  </Text>
-                                  <Text style={[styles.commentTime, { color: colors.foreground, opacity: 0.5, fontSize: 10 }]}>
-                                    {formatTimeAgo(reply.created_at)}
-                                  </Text>
-                                </View>
-                                {reply.user_id === user?.id && (
-                                  <TouchableOpacity onPress={() => handleDeleteReply(reply.id, comment.id)}>
-                                    <Ionicons name="trash-outline" size={14} color="#ff3b30" />
-                                  </TouchableOpacity>
-                                )}
-                              </View>
-                              <Text style={[styles.replyContent, { color: colors.foreground }]}>
-                                {reply.content}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      {/* Reply Input */}
-                      {replyingTo?.commentId === comment.id && (
-                        <View style={[styles.replyInputContainer, { borderColor: colors.border }]}>
-                          <Text style={[styles.replyingToText, { color: colors.foreground, opacity: 0.6 }]}>
-                            Replying to {replyingTo.userName}
-                          </Text>
-                          <View style={styles.replyInputRow}>
-                            <TextInput
-                              style={[styles.replyInput, { color: colors.foreground, borderColor: colors.border }]}
-                              placeholder="Write a reply..."
-                              placeholderTextColor={colors.foreground + '80'}
-                              value={newReply}
-                              onChangeText={setNewReply}
-                              multiline
-                              maxLength={300}
-                            />
-                            <View style={styles.replyActions}>
-                              <TouchableOpacity onPress={() => { setReplyingTo(null); setNewReply(''); }}>
-                                <Ionicons name="close" size={20} color={colors.foreground} />
-                              </TouchableOpacity>
-                              <TouchableOpacity 
-                                onPress={() => handleAddReply(comment.id)}
-                                disabled={isAddingReply || !newReply.trim()}
-                              >
-                                {isAddingReply ? (
-                                  <ActivityIndicator size="small" color={colors.tint} />
-                                ) : (
-                                  <Ionicons 
-                                    name="send" 
-                                    size={20} 
-                                    color={newReply.trim() ? colors.tint : colors.foreground + '40'} 
-                                  />
-                                )}
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  ))
-                )}
-              </ScrollView>
-
-              {/* Add Comment Input */}
-              <View style={[styles.addCommentContainer, { borderTopColor: colors.border }]}>
-                <TextInput
-                  style={[styles.commentInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.background }]}
-                  placeholder="Write a comment..."
-                  placeholderTextColor={colors.foreground + '80'}
-                  value={newComment}
-                  onChangeText={setNewComment}
-                  multiline
-                  maxLength={500}
-                />
-                <TouchableOpacity 
-                  style={[styles.sendCommentButton, { backgroundColor: colors.tint }, (!newComment.trim() || isAddingComment) && styles.buttonDisabled]}
-                  onPress={handleAddComment}
-                  disabled={isAddingComment || !newComment.trim()}
-                >
-                  {isAddingComment ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Ionicons name="send" size={18} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1651,9 +1661,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   postContent: {
-    fontSize: 15,
+    fontSize: Typography.fontSizes.base,
     lineHeight: 20,
     marginBottom: Spacing.sm,
+  },
+  mentionText: {
+    fontWeight: '600',
   },
   postImage: {
     width: '100%',
@@ -1711,16 +1724,28 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
     padding: Spacing.lg,
-    maxHeight: '80%',
+    paddingBottom: Spacing.xl,
+    maxHeight: '90%',
   },
   modalScroll: {
-    flexGrow: 0,
+    flexShrink: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: Spacing.md,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  headerImageButton: {
+    padding: Spacing.xs,
   },
   modalTitle: {
     fontSize: 18,
@@ -1742,6 +1767,36 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     marginBottom: Spacing.md,
   },
+  mentionModal: {
+    maxHeight: 200,
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+  },
+  mentionList: {
+    maxHeight: 200,
+  },
+  mentionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  mentionAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: Spacing.md,
+  },
+  mentionName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  mentionUsername: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
   imagePreview: {
     position: 'relative',
     marginBottom: Spacing.md,
@@ -1761,12 +1816,14 @@ const styles = StyleSheet.create({
   imagePickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
-    padding: Spacing.md,
+    padding: Spacing.lg,
+    marginTop: Spacing.md,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 2,
     borderStyle: 'dashed',
+    backgroundColor: 'rgba(0, 122, 255, 0.05)',
   },
   imagePickerText: {
     fontSize: 16,
@@ -2041,141 +2098,92 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: Spacing.xs,
   },
-  commentsModalContent: {
-    borderTopLeftRadius: BorderRadius.lg,
-    borderTopRightRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    maxHeight: '85%',
-    minHeight: '50%',
-  },
-  commentsScrollView: {
-    flex: 1,
-    marginBottom: Spacing.md,
-  },
-  emptyCommentsState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.xl * 2,
-  },
-  commentContainer: {
-    marginBottom: Spacing.md,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  commentHeader: {
+  addCommentContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.xs,
+    gap: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
   },
-  commentAvatar: {
+  sendCommentButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addReplyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingTop: Spacing.sm,
+    marginLeft: Spacing.lg,
+  },
+  sendReplyButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    marginRight: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  commentUserInfo: {
-    flex: 1,
+  commentsSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
   },
-  commentUserName: {
+  commentItem: {
+    marginBottom: Spacing.md,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  commentAuthor: {
     fontSize: 14,
     fontWeight: '600',
+    marginBottom: 4,
   },
-  commentTime: {
-    fontSize: 11,
-  },
-  commentContent: {
+  commentText: {
     fontSize: 14,
-    lineHeight: 20,
-    marginLeft: 40,
+    lineHeight: 18,
   },
-  replyButton: {
+  commentMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginLeft: 40,
     marginTop: Spacing.xs,
   },
-  replyButtonText: {
+  commentTime: {
     fontSize: 12,
-    fontWeight: '500',
   },
-  repliesContainer: {
-    marginLeft: 40,
+  replyButton: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  repliesSection: {
     marginTop: Spacing.sm,
-    paddingLeft: Spacing.sm,
+    marginLeft: Spacing.lg,
+    paddingLeft: Spacing.md,
     borderLeftWidth: 2,
     borderLeftColor: '#e0e0e0',
   },
   replyItem: {
     marginBottom: Spacing.sm,
   },
-  replyAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: Spacing.xs,
-  },
-  replyUserName: {
-    fontSize: 12,
+  replyAuthor: {
+    fontSize: 13,
     fontWeight: '600',
+    marginBottom: 2,
   },
-  replyContent: {
+  replyText: {
     fontSize: 13,
-    lineHeight: 18,
-    marginLeft: 32,
+    lineHeight: 16,
   },
-  replyInputContainer: {
-    marginLeft: 40,
-    marginTop: Spacing.sm,
-    padding: Spacing.sm,
-    borderWidth: 1,
-    borderRadius: BorderRadius.md,
+  replyMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
-  replyingToText: {
+  replyTime: {
     fontSize: 11,
-    marginBottom: Spacing.xs,
-  },
-  replyInputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
-  },
-  replyInput: {
-    flex: 1,
-    fontSize: 13,
-    minHeight: 36,
-    maxHeight: 80,
-    padding: Spacing.xs,
-    borderWidth: 1,
-    borderRadius: BorderRadius.sm,
-  },
-  replyActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  addCommentContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-  },
-  commentInput: {
-    flex: 1,
-    fontSize: 14,
-    minHeight: 40,
-    maxHeight: 100,
-    padding: Spacing.sm,
-    borderWidth: 1,
-    borderRadius: BorderRadius.md,
-  },
-  sendCommentButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
