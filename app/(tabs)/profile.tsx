@@ -7,11 +7,11 @@ import { friendService, type BlockedUser } from '@/services/friendService';
 import { fitbitService } from '@/services/fitbitService';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    Image,
     Modal,
     ScrollView,
     StyleSheet,
@@ -117,14 +117,46 @@ export default function ProfileScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.5, // Reduced from 0.8 to 0.5 for smaller file size
       });
 
-      if (!result.canceled && result.assets[0]) {
-        // TODO: Upload image to Supabase storage
-        Alert.alert('Coming Soon', 'Avatar upload will be implemented in the next phase');
+      if (!result.canceled && result.assets[0] && user?.id) {
+        const asset = result.assets[0];
+        
+        console.log('📸 Selected image details:');
+        console.log('  - URI:', asset.uri);
+        console.log('  - Width:', asset.width);
+        console.log('  - Height:', asset.height);
+        console.log('  - File size:', asset.fileSize ? `${(asset.fileSize / 1024 / 1024).toFixed(2)} MB` : 'unknown');
+        
+        // Validate file size (2MB max to be safe with Supabase limits)
+        if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
+          Alert.alert(
+            'File Too Large', 
+            `Image is ${(asset.fileSize / 1024 / 1024).toFixed(2)}MB. Please select an image smaller than 2MB or try taking a new photo.`
+          );
+          return;
+        }
+
+        setLoading(true);
+        try {
+          console.log('🚀 Starting avatar upload...');
+          const publicUrl = await authService.uploadAvatar(user.id, asset.uri);
+          console.log('✅ Avatar upload complete, refreshing user...');
+          await refreshUser();
+          Alert.alert('Success', 'Profile photo updated successfully');
+        } catch (error) {
+          console.error('❌ Avatar upload error:', error);
+          Alert.alert(
+            'Upload Failed',
+            error instanceof Error ? error.message : 'Failed to upload avatar. Please try again.'
+          );
+        } finally {
+          setLoading(false);
+        }
       }
     } catch (error) {
+      console.error('Image picker error:', error);
       Alert.alert('Error', 'Failed to pick image');
     }
   };
@@ -226,7 +258,26 @@ export default function ProfileScreen() {
         <View style={styles.avatarSection}>
           <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
             {user?.avatar_url ? (
-              <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+              <Image 
+                source={user.avatar_url}
+                style={styles.avatar}
+                contentFit="cover"
+                transition={200}
+                cachePolicy="memory-disk"
+                onError={(error) => {
+                  console.error('❌ ===== AVATAR LOAD ERROR =====');
+                  console.error('URL:', user.avatar_url);
+                  console.error('Error:', error);
+                  console.error('URL starts with http:', user.avatar_url?.startsWith('http'));
+                  console.error('URL length:', user.avatar_url?.length);
+                  console.error('================================');
+                }}
+                onLoad={() => {
+                  console.log('✅ ===== AVATAR LOADED =====');
+                  console.log('URL:', user.avatar_url);
+                  console.log('============================');
+                }}
+              />
             ) : (
               <View style={[styles.avatarPlaceholder, { backgroundColor: colors.muted }]}>
                 <Ionicons name="person" size={40} color={colors.mutedForeground} />
