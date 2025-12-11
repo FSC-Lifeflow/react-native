@@ -1,6 +1,6 @@
-import { Card } from '@/components/ui/Card';
 import { MentionText } from '@/components/MentionText';
 import { MentionTextarea } from '@/components/MentionTextarea';
+import { Card } from '@/components/ui/Card';
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -11,27 +11,27 @@ import { Friend } from '@/services/friendService';
 import { CalendarEvent, googleCalendarService } from '@/services/googleCalendarService';
 import { motivationService } from '@/services/motivationService';
 import { notificationService } from '@/services/notificationService';
-import { PostComment, postService } from '@/services/postService';
 import { postInteractionService } from '@/services/postInteractionService';
+import { PostComment, postService } from '@/services/postService';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 
 export default function FeedScreen() {
   const colorScheme = useColorScheme();
@@ -656,8 +656,15 @@ export default function FeedScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="chatbubble-outline" size={22} color={colors.foreground} />
+        <TouchableOpacity 
+          style={styles.actionButton}
+          onPress={() => toggleComments(post.id)}
+        >
+          <Ionicons 
+            name={expandedComments.has(post.id) ? "chatbubble" : "chatbubble-outline"} 
+            size={22} 
+            color={expandedComments.has(post.id) ? colors.tint : colors.foreground} 
+          />
           <Text style={[styles.actionText, { color: colors.foreground }]}>
             {post.comments_count || 0}
           </Text>

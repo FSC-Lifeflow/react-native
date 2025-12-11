@@ -9,12 +9,13 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useFitbit } from '@/hooks/useFitbit';
 import { useFriends } from '@/hooks/useFriends';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
+import { coWorkoutService } from '@/services/coWorkoutService';
 import { Friend } from '@/services/friendService';
 import { CalendarEvent, googleCalendarService } from '@/services/googleCalendarService';
 import { Notification, notificationService } from '@/services/notificationService';
 import { workoutService } from '@/services/workoutService';
-import { coWorkoutService } from '@/services/coWorkoutService';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -35,6 +36,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -547,8 +549,8 @@ export default function DashboardScreen() {
             Your consistency with morning workouts is paying off! Sleep quality
             improved with evening yoga.
           </Text>
-          <TouchableOpacity style={styles.insightButton}>
-            <Text style={[styles.insightButtonText, { color: colors.primary }]}>View Details</Text>
+          <TouchableOpacity style={styles.insightButton} onPress={() => router.push('/(tabs)/chat')}>
+            <Text style={[styles.insightButtonText, { color: colors.primary }]}>Let's Chat</Text>
             <Ionicons name="arrow-forward" size={16} color={colors.primary} />
           </TouchableOpacity>
         </Card>
