@@ -279,40 +279,43 @@ export const postService = {
     try {
       console.log('📤 Starting image upload:', imageUri);
 
-      // Create a blob from the image URI using XMLHttpRequest
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.onload = function () {
-          resolve(xhr.response);
-        };
-        xhr.onerror = function (e) {
-          console.error('❌ XHR error:', e);
-          reject(new TypeError('Network request failed'));
-        };
-        xhr.responseType = 'blob';
-        xhr.open('GET', imageUri, true);
-        xhr.send(null);
-      });
-
-      console.log('✅ Blob created:', { size: blob.size, type: blob.type });
-
-      // Get file extension from URI or blob type
-      let fileExt = imageUri.split('.').pop()?.split('?')[0] || 'jpg';
-      if (blob.type) {
-        const typeExt = blob.type.split('/')[1];
-        if (typeExt) fileExt = typeExt;
+      // Use fetch with ArrayBuffer instead of blob to avoid 0-byte uploads in React Native
+      console.log('📥 Reading file from URI...');
+      const response = await fetch(imageUri);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+      }
+      
+      // Get as ArrayBuffer instead of blob
+      const arrayBuffer = await response.arrayBuffer();
+      const fileSize = arrayBuffer.byteLength;
+      
+      console.log('📦 File details:');
+      console.log('  - Size:', fileSize, 'bytes', `(${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
+      
+      if (fileSize === 0) {
+        throw new Error('File is empty (0 bytes). Please try selecting a different image.');
+      }
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        throw new Error(`File is too large (${(fileSize / 1024 / 1024).toFixed(2)}MB). Maximum is 10MB.`);
       }
 
+      // Get file extension from URI
+      const fileExt = imageUri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
       const fileName = `${userId}/${Date.now()}.${fileExt}`;
+      
       console.log('📝 Uploading as:', fileName);
+      console.log('📝 Content type:', `image/${fileExt}`);
 
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage using ArrayBuffer
       const { data, error } = await supabase.storage
         .from('post-images')
-        .upload(fileName, blob, {
+        .upload(fileName, arrayBuffer, {
           cacheControl: '3600',
           upsert: false,
-          contentType: blob.type || `image/${fileExt}`,
+          contentType: `image/${fileExt}`,
         });
 
       if (error) {
@@ -320,10 +323,39 @@ export const postService = {
         throw new Error(`Failed to upload image: ${error.message}`);
       }
 
+      console.log('✅ File uploaded successfully');
+      console.log('📤 Upload response:', data);
+
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('post-images')
         .getPublicUrl(fileName);
+
+      console.log('🔗 Public URL generated:', publicUrl);
+
+      // Test if the URL is accessible
+      console.log('🧪 Testing URL accessibility...');
+      try {
+        const testResponse = await fetch(publicUrl, { method: 'HEAD' });
+        console.log('🧪 URL test status:', testResponse.status);
+        
+        if (!testResponse.ok) {
+          console.error('❌ URL is not accessible! Status:', testResponse.status);
+          
+          if (testResponse.status === 404) {
+            throw new Error('Image not found in storage (404). The upload may have failed silently.');
+          } else if (testResponse.status === 403) {
+            throw new Error('Access denied (403). The post-images bucket must be set to public in Supabase Dashboard.');
+          } else {
+            throw new Error(`URL returned status ${testResponse.status}. Please check Supabase Storage settings.`);
+          }
+        } else {
+          console.log('✅ URL is accessible!');
+        }
+      } catch (testError) {
+        console.error('❌ Failed to test URL:', testError);
+        throw testError;
+      }
 
       console.log('✅ Image uploaded successfully:', publicUrl);
       return publicUrl;

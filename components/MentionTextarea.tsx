@@ -196,9 +196,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     ...Typography.body,
-    minHeight: 100, // Reverted to original height
+    minHeight: 120,
+    maxHeight: 250,
     textAlignVertical: 'top',
   },
   modalOverlay: {

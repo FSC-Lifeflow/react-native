@@ -864,12 +864,21 @@ export default function FeedScreen() {
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalKeyboardView}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
           >
             <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
               <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                  <Ionicons name="close" size={28} color={colors.foreground} />
-                </TouchableOpacity>
+                <View style={styles.modalHeaderLeft}>
+                  <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                    <Ionicons name="close" size={28} color={colors.foreground} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={handlePickImage}
+                    style={styles.headerImageButton}
+                  >
+                    <Ionicons name="image-outline" size={28} color={colors.tint} />
+                  </TouchableOpacity>
+                </View>
                 <Text style={[styles.modalTitle, { color: colors.foreground }]}>Create Post</Text>
                 <TouchableOpacity
                   onPress={handleCreatePost}
@@ -889,6 +898,7 @@ export default function FeedScreen() {
 
               <ScrollView 
                 style={styles.modalScroll} 
+                contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
@@ -910,11 +920,6 @@ export default function FeedScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
-
-                <TouchableOpacity style={styles.imagePickerButton} onPress={handlePickImage}>
-                  <Ionicons name="image-outline" size={24} color={colors.tint} />
-                  <Text style={[styles.imagePickerText, { color: colors.tint }]}>Add Photo</Text>
-                </TouchableOpacity>
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
@@ -1725,16 +1730,28 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
     padding: Spacing.lg,
-    maxHeight: '80%',
+    paddingBottom: Spacing.xl,
+    maxHeight: '90%',
   },
   modalScroll: {
-    flexGrow: 0,
+    flexShrink: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: Spacing.md,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  headerImageButton: {
+    padding: Spacing.xs,
   },
   modalTitle: {
     fontSize: 18,
@@ -1805,12 +1822,14 @@ const styles = StyleSheet.create({
   imagePickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
-    padding: Spacing.md,
+    padding: Spacing.lg,
+    marginTop: Spacing.md,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 2,
     borderStyle: 'dashed',
+    backgroundColor: 'rgba(0, 122, 255, 0.05)',
   },
   imagePickerText: {
     fontSize: 16,
